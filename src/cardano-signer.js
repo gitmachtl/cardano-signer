@@ -1,5 +1,5 @@
 const appname = "cardano-signer"
-const version = "1.6.1"
+const version = "1.7.0"
 
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
 const cbor = require("cbor");
@@ -7,7 +7,7 @@ const fs = require("fs");
 const blake2 = require('blake2');
 const args = require('minimist')(process.argv.slice(2));
 
-const regExp = /^[0-9a-fA-F]+$/;
+const regExpHex = /^[0-9a-fA-F]+$/;
 
 //catch all exceptions that are not catched via try
 process.on('uncaughtException', function (error) {
@@ -15,55 +15,66 @@ process.on('uncaughtException', function (error) {
 });
 
 
-
 function showUsage(){
+//FontColors
+Reset = "\x1b[0m"; Bright = "\x1b[1m"; Dim = "\x1b[2m"; Underscore = "\x1b[4m"; Blink = "\x1b[5m"; Reverse = "\x1b[7m"; Hidden = "\x1b[8m"
+FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b[33m"; FgBlue = "\x1b[34m"; FgMagenta = "\x1b[35m"; FgCyan = "\x1b[36m"; FgWhite = "\x1b[37m"
+
         console.log(``)
-        console.log(`Signing a hex/text-string or a binary-file:`)
+        console.log(`${Bright}${Underscore}Signing a hex/text-string or a binary-file:${Reset}`)
         console.log(``)
-        console.log(`   Syntax: ${appname} sign`);
-	console.log(`   Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"`);
-	console.log(`								data/payload/file to sign in hexformat or textformat`);
-	console.log(`           --secret-key "<path_to_file>|<hex>|<bech>"		path to a signing-key-file or a direct signing hex/bech-key string`);
-	console.log(`           [--out-file "<path_to_file>"]			path to an output file, default: standard-output`);
-        console.log(`   Output: signature_hex + publicKey_hex`);
-        console.log(``)
-        console.log(``)
-        console.log(`Signing a payload in CIP-8 mode:`)
-        console.log(``)
-        console.log(`   Syntax: ${appname} sign --cip8`);
-	console.log(`   Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"`);
-	console.log(`								data/payload/file to sign in hexformat or textformat`);
-	console.log(`           --secret-key "<path_to_file>|<hex>|<bech>"		path to a signing-key-file or a direct signing hex/bech-key string`);
-	console.log(`           --address "<bech_address>" 				signing address (bech format like 'stake1_...')`);
-	console.log(`           [--out-file "<path_to_file>"]			path to an output file, default: standard-output`);
-        console.log(`   Output: signature_hex + publicKey_hex`);
+        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign${Reset}`);
+	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"`);
+	console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
+	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
+	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+        console.log(`   Output: ${FgCyan}"signature_hex + publicKey_hex"${Reset} or ${FgCyan}JSON-Format${Reset}`);
         console.log(``)
         console.log(``)
-        console.log(`Signing a catalyst registration/delegation in CIP-36 mode:`)
+        console.log(`${Bright}${Underscore}Signing a payload in CIP-8 mode:${Reset}`)
         console.log(``)
-        console.log(`   Syntax: ${appname} sign --cip36`);
-	console.log(`   Params: --vote-public-key "<path_to_file>|<hex>|<bech>"	public-key-file or public hex/bech-key string to delegate the votingpower to`);
-	console.log(`           --vote-weight <unsigned_int>				relative weight of the delegated votingpower, default: 1 (=100% for single delegation)`);
-	console.log(`           --secret-key "<path_to_file>|<hex>|<bech>"		signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)`);
-	console.log(`           --rewards-address "<bech_address>"			rewards stake address (bech format like 'stake1_...')`);
-	console.log(`           --nonce <unsigned_int>				nonce value, this is typically the slotheight(tip) of the chain`);
-	console.log(`           [--vote-purpose <unsigned_int>]			optional parameter (unsigned int), default: 0 (catalyst)`);
-	console.log(`           [--out-file "<path_to_file>"]			path to write a binary metadata.cbor file to`);
-        console.log(`   Output: registration_data_cbor_hex`);
-        console.log(``)
-        console.log(``)
-        console.log(`Verifying a hex/text-string or a binary-file(data) via signature + publicKey:`)
-        console.log(``)
-        console.log(`   Syntax: ${appname} verify`);
-	console.log(`   Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"`);
-	console.log(`								data/payload/file to verify in hexformat or textformat`);
-	console.log(`           --signature "<hex>"					signature in hexformat`);
-	console.log(`           --public-key "<path_to_file>|<hex>|<bech>"		path to a public-key-file or a direct public hex/bech-key string`);
-        console.log(`   Output: true(exitcode 0) or false(exitcode 1)`)
+        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip8${Reset}`);
+	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
+	console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
+	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
+	console.log(`           ${FgGreen}--address${Reset} "<bech_address>" 				${Dim}signing address (bech format like 'stake1_...')${Reset}`);
+	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+        console.log(`   Output: ${FgCyan}"signature_hex + publicKey_hex"${Reset} or ${FgCyan}JSON-Format${Reset}`);
         console.log(``)
         console.log(``)
-        console.log(`Info:`);
-	console.log(`   https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)`)
+        console.log(`${Bright}${Underscore}Signing a catalyst registration/delegation in CIP-36 mode:${Reset}`)
+        console.log(``)
+        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip36${Reset}`);
+	console.log(`   Params: ${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to delegate the votingpower to${Reset}`);
+	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>				${Dim}relative weight of the delegated votingpower, default: 1 (=100% for single delegation)${Reset}`);
+	console.log(`           [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}additional public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to${Reset}`);
+	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>]			${Dim}additional relative weight(s) of the delegated votingpower, default: 1 (=100% for single delegation)${Reset}`);
+	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)${Reset}`);
+	console.log(`           ${FgGreen}--rewards-address${Reset} "<bech_address>"			${Dim}rewards stake address (bech format like 'stake1_...')${Reset}`);
+	console.log(`           ${FgGreen}--nonce${Reset} <unsigned_int>				${Dim}nonce value, this is typically the slotheight(tip) of the chain${Reset}`);
+	console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
+	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex${Reset}`);
+	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+	console.log(`           [${FgGreen}--out-cbor${Reset} "<path_to_file>"]			${Dim}path to write a binary metadata.cbor file to${Reset}`);
+        console.log(`   Output: ${FgCyan}Registration-Metadata in JSON-, cborHex-, cborBinary-Format${Reset}`);
+        console.log(``)
+        console.log(``)
+        console.log(`${Bright}${Underscore}Verifying a hex/text-string or a binary-file(data) via signature + publicKey:${Reset}`)
+        console.log(``)
+        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify${Reset}`);
+	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
+	console.log(`								${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
+	console.log(`           ${FgGreen}--signature${Reset} "<hex>"					${Dim}signature in hexformat${Reset}`);
+	console.log(`           ${FgGreen}--public-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a public-key-file or a direct public hex/bech-key string${Reset}`);
+	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+        console.log(`   Output: ${FgCyan}"true/false" (exitcode 0/1)${Reset} or ${FgCyan}JSON-Format${Reset}`)
+        console.log(``)
+        console.log(``)
+        console.log(`${Dim}${Underscore}Info:${Reset}`);
+	console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
         console.log(``)
         process.exit(1);
 }
@@ -76,7 +87,7 @@ function trimString(s){
 }
 
 
-function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json or a direct hex entry // returns a hexstring of the key
+function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json, a direct hex entry or a bech-string  // returns a hexstring of the key
 
 	var key_hex = "";
 
@@ -91,7 +102,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json 
 				if ( ! is_singing_key ) { console.error(`Error: The file '${key}' is not a signing/secret key json`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
-				if ( ! regExp.test(key_hex) ) { console.error(`Error: The secret key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
+				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The secret key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
 				return key_hex;
 			} catch (error) {}
 
@@ -115,7 +126,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json 
 			// try to use the parameter as a direct hex string
 			key_hex = trimString(key.toLowerCase());
 			//check that the given key is a hex string
-			if ( ! regExp.test(key) ) { console.error(`Error: Provided secret key '${key}' is not a valid secret key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
+			if ( ! regExpHex.test(key) ) { console.error(`Error: Provided secret key '${key}' is not a valid secret key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
 			return key_hex;
 			break;
 
@@ -129,7 +140,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json 
 				if ( ! is_verification_key ) { console.error(`Error: The file '${key}' is not a verification/public key json`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
-				if ( ! regExp.test(key_hex) ) { console.error(`Error: The public key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
+				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The public key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
 				return key_hex;
 			} catch (error) {}
 
@@ -153,7 +164,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json 
 			// try to use the parameter as a direct hex string
 			key_hex = trimString(key.toLowerCase());
 			//check that the given key is a hex string
-			if ( ! regExp.test(key) ) { console.error(`Error: Provided public key '${key}' is not a valid public key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
+			if ( ! regExpHex.test(key) ) { console.error(`Error: Provided public key '${key}' is not a valid public key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
 			return key_hex;
 			break;
 
@@ -201,7 +212,7 @@ function getHash(content) { //hashes a given hex-string content with blake2b_256
 async function main() {
 
         //show help or usage if no parameter is provided
-        if ( ! process.argv[2] || process.argv[2].toLowerCase().includes('help') ) { console.log(`${appname} ${version}`); showUsage(); }
+        if ( ! process.argv[2] || process.argv[2].toLowerCase().includes('help') || process.argv[2].toLowerCase().includes('usage') ) { console.log(`${appname} ${version}`); showUsage(); }
 
         //show version
         if ( process.argv[2].toLowerCase().includes('version') ) { console.log(`${appname} ${version}`); process.exit(0); }
@@ -250,7 +261,7 @@ async function main() {
 		        sign_data_hex = trimString(sign_data_hex.toLowerCase());
 
 			//check that the given data is a hex string
-			if ( ! regExp.test(sign_data_hex) ) { console.error(`Error: Data to sign is not a valid hex string`); showUsage(); }
+			if ( ! regExpHex.test(sign_data_hex) ) { console.error(`Error: Data to sign is not a valid hex string`); showUsage(); }
 
 			//get signing key -> store it in sign_key
 			var key_file_hex = args['secret-key'];
@@ -274,16 +285,25 @@ async function main() {
 			var signature = Buffer.from(signedBytes).toString('hex');
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
-			//output the signature data and the public key
-			var content = signature + " " + pubKey;
+			//compose the content for the output: signature data + public key
+			if ( args['json'] === true ) { //generate content in json format
+				var content = `{ "signature": "${signature}", "publicKey": "${pubKey}" }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
+				var content = `{ "workMode": "${workMode}", `;
+				if ( sign_data_hex.length <= 2000000 ) { content += `"signDataHex": "${sign_data_hex}", `; } //only include the sign_data_hex if it is less than 2M of chars
+				content += `"signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
+			} else { //generate content in text format
+				var content = signature + " " + pubKey;
+			}
+
+			//output the signature data and the public key to the console or to a file
 			var out_file = args['out-file'];
 		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
-			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content);} //Output to console
 			else { //else try to write the content out to the given file
 				try {
-				const outFile = fs.createWriteStream(out_file);
-				outFile.write(content, 'utf8');
-				outFile.end();
+				fs.writeFileSync(out_file,content, 'utf8')
 				// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
@@ -318,7 +338,9 @@ async function main() {
 		        sign_data_hex = trimString(sign_data_hex.toLowerCase());
 
 			//check that the given data is a hex string
-			if ( ! regExp.test(sign_data_hex) ) { console.error(`Error: Data to sign is not a valid hex string`); showUsage(); }
+			if ( ! regExpHex.test(sign_data_hex) ) { console.error(`Error: Data to sign is not a valid hex string`); showUsage(); }
+
+			var sign_data_hex_orig = sign_data_hex //copy the sign_data_hex for later json output
 
 			//get signing address (stake or paymentaddress in bech format)
 			var sign_addr = args['address'];
@@ -359,16 +381,26 @@ async function main() {
 			var signature = Buffer.from(signedBytes).toString('hex');
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
-			//output the signature data and the public key
-			var content = signature + " " + pubKey;
+			//compose the content for the output: signature data + public key
+			if ( args['json'] === true ) { //generate content in json format
+				var content = `{ "signature": "${signature}", "publicKey": "${pubKey}" }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
+				var content = `{ "workMode": "${workMode}", "addressHex": "${sign_addr_hex}", `;
+				if ( sign_data_hex_orig.length <= 2000000 ) { content += `"inputDataHex": "${sign_data_hex_orig}", `; } //only include the sign_data_hex if it is less than 2M of chars
+				if ( sign_data_hex.length <= 2000000 ) { content += `"signDataHex": "${sign_data_hex}", `; } //only include the sign_data_hex if it is less than 2M of chars
+				content += `"signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
+			} else { //generate content in text format
+				var content = signature + " " + pubKey;
+			}
+
+			//output the signature data and the public key to the console or to a file
 			var out_file = args['out-file'];
 		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
 			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
 			else { //else try to write the content out to the given file
 				try {
-				const outFile = fs.createWriteStream(out_file);
-				outFile.write(content, 'utf8');
-				outFile.end();
+				fs.writeFileSync(out_file,content, 'utf8')
 				// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
@@ -424,6 +456,7 @@ async function main() {
 			//build the vote_delegation array
 			const vote_delegation_array = [];
 			const all_vote_keys_array = [];  //used to check for duplicates later
+			const all_weights_array = [];  //used for an extended json output later
 			for (let cnt = 0; cnt < vote_public_key.length; cnt++) {
 				entry_vote_public_key = vote_public_key[cnt]
 			        if ( typeof entry_vote_public_key === 'number' || entry_vote_public_key === true ) { console.error(`Error: Invalid public key parameter found, please use a filename or a hex string`); process.exit(1); }
@@ -432,6 +465,7 @@ async function main() {
 				if (typeof entry_vote_weight !== 'number' || entry_vote_weight <= 0) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value > 0`); process.exit(1); }
 				vote_delegation_array.push([Buffer.from(entry_vote_public_key_hex.substring(0,64),'hex'),entry_vote_weight]) //during the push, only use the first 32bytes (64chars) of the public_key_hex
 				all_vote_keys_array.push(entry_vote_public_key_hex.substring(0,64)) //collect all hex public keys in an extra array to quickly find duplicates afterwards
+				all_weights_array.push(entry_vote_weight) //collect all voting weights in an extra array for an extended json output later
 			}
 
 			//check for duplicated key entries
@@ -474,9 +508,9 @@ async function main() {
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
 			/*
-			build the full registration map by adding the root key 61285 and the signature in key 1 below that
+			build the full registration map by adding the root key 61285 and the signature in key 1 below that like
 			61285 : {
-				   1: <signature>  // signed signature from the stake_secret_key
+				   1: <signature>  // signed signature(byte array) from the stake_secret_key
 			}
 			*/
 			const registrationMap = delegationMap.set(61285,new Map().set(1,Buffer.from(signature,'hex')))
@@ -484,14 +518,43 @@ async function main() {
 			//convert it to a cbor hex string
 			const registrationCBOR = Buffer.from(cbor.encode(registrationMap)).toString('hex');
 
-			//output the registrationCBOR or write it to a binary file
+			//compose the content for the output as JSON registration, extended JSON data or plain registrationCBOR
+			if ( args['json'] === true ) { //generate content in json format
+				var delegations = [];
+				for (let cnt = 0; cnt < all_vote_keys_array.length; cnt++) {
+				delegations.push(`[ "0x${all_vote_keys_array[cnt]}", ${all_weights_array[cnt]} ]`)
+				}
+				var content = `{ "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr_hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
+				var content = `{ "workMode": "${workMode}", `;
+				var delegations = [];
+				for (let cnt = 0; cnt < all_vote_keys_array.length; cnt++) {
+				delegations.push(`[ "0x${all_vote_keys_array[cnt]}", ${all_weights_array[cnt]} ]`)
+				}
+				content += `"registrationCBOR": "${registrationCBOR}", "registrationJSON": { "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr_hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } } , "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
+			} else { //generate content in text format
+				var content = `${registrationCBOR}`;
+			}
+
+			//output the content to the console or to a file
 			var out_file = args['out-file'];
 		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
-			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(registrationCBOR); }
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
 			else { //else try to write the content out to the given file
 				try {
+				fs.writeFileSync(out_file,content, 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output the registrationCBOR to a binary file
+			var out_cbor = args['out-cbor'];
+		        //if there is a --out-cbor parameter specified then try to write output as a binary cbor file
+			if ( typeof out_cbor === 'string' ) {
+				try {
 				var writeBuf = Buffer.from(registrationCBOR,'hex')
-				fs.writeFileSync(out_file, writeBuf, 'binary')
+				fs.writeFileSync(out_cbor, writeBuf, 'binary')
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 			break;
@@ -525,7 +588,7 @@ async function main() {
 		        verify_data_hex = trimString(verify_data_hex.toLowerCase());
 
 			//check that the given data is a hex string
-			if ( ! regExp.test(verify_data_hex) ) { console.error(`Error: Data to verify is not a valid hex string`); process.exit(1); }
+			if ( ! regExpHex.test(verify_data_hex) ) { console.error(`Error: Data to verify is not a valid hex string`); process.exit(1); }
 
 			//get the signature to verify -> store it in signature
 			var signature = args['signature'];
@@ -533,7 +596,7 @@ async function main() {
 		        signature = trimString(signature.toLowerCase());
 
 			//check that the given signature is a hex string
-			if ( ! regExp.test(signature) ) { console.error(`Error: Signature is not a valid hex string`); process.exit(1); }
+			if ( ! regExpHex.test(signature) ) { console.error(`Error: Signature is not a valid hex string`); process.exit(1); }
 
 			//get public key -> store it in public_key
 			var key_file_hex = args['public-key'];
@@ -555,10 +618,32 @@ async function main() {
 			//do the verification
 			const verified = publicKey.verify(Buffer.from(verify_data_hex,'hex'),ed25519signature);
 
-			//output the result and exit with the right exitcode
-			if ( verified ) { console.log(`true`); process.exit(0); }
-				   else { console.log(`false`); process.exit(1); }
+			//compose the content for the output: signature data + public key
+			if ( args['json'] === true ) { //generate content in json format
+				var content = `{ "result": "${verified}" }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var content = `{ "workMode": "${workMode}", "result": "${verified}", `;
+				if ( verify_data_hex.length <= 2000000 ) { content += `"verifyDataHex": "${verify_data_hex}", `; } //only include the verify_data_hex if it is less than 2M of chars
+				content += `"signature": "${signature}", "publicKey": "${public_key}" }`;
+			} else { //generate content in text format
+				var content = `${verified}`;
+			}
 
+
+			//output the verification result to the console or to a file
+			var out_file = args['out-file'];
+		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content);} //Output to console
+			else { //else try to write the content out to the given file
+				try {
+				fs.writeFileSync(out_file,content, 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//exit with the right exitcode
+			if ( verified ) { process.exit(0); }
+				   else { process.exit(1); }
 			break;
 
 
