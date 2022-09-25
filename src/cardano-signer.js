@@ -1,5 +1,5 @@
 const appname = "cardano-signer"
-const version = "1.6.0"
+const version = "1.6.1"
 
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
 const cbor = require("cbor");
@@ -423,6 +423,7 @@ async function main() {
 
 			//build the vote_delegation array
 			const vote_delegation_array = [];
+			const all_vote_keys_array = [];  //used to check for duplicates later
 			for (let cnt = 0; cnt < vote_public_key.length; cnt++) {
 				entry_vote_public_key = vote_public_key[cnt]
 			        if ( typeof entry_vote_public_key === 'number' || entry_vote_public_key === true ) { console.error(`Error: Invalid public key parameter found, please use a filename or a hex string`); process.exit(1); }
@@ -430,7 +431,12 @@ async function main() {
 				entry_vote_weight = vote_weight[cnt] + 0;
 				if (typeof entry_vote_weight !== 'number' || entry_vote_weight <= 0) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value > 0`); process.exit(1); }
 				vote_delegation_array.push([Buffer.from(entry_vote_public_key_hex.substring(0,64),'hex'),entry_vote_weight]) //during the push, only use the first 32bytes (64chars) of the public_key_hex
+				all_vote_keys_array.push(entry_vote_public_key_hex.substring(0,64)) //collect all hex public keys in an extra array to quickly find duplicates afterwards
 			}
+
+			//check for duplicated key entries
+			hasDuplicates = all_vote_keys_array.some((element, index) => { return all_vote_keys_array.indexOf(element) !== index });
+			if (hasDuplicates) { console.error(`Error: Duplicated resolved vote-public-key entries found. Please only use a vote-public-key one time in a delegation.`); process.exit(1); }
 
 			//get the --nonce parameter
 			var nonce = args['nonce'];
@@ -446,16 +452,11 @@ async function main() {
 			/*
 			build the delegation map
 			61284: {
-				  // delegations - CBOR byte array(s) of the voting_public_keys and the relative voting_weight
-				  1: [["0xa6a3c0447aeb9cc54cf6422ba32b294e5e1c3ef6d782f2acff4a70694c4d1663", 1], ["0x00588e8e1d18cba576a4d35758069fe94e53f638b6faf7c07b8abd2bc5c5cdee", 3]],
-				  // stake_pub - CBOR byte array
-				  2: "0xad4b948699193634a39dd56f779a2951a24779ad52aa7916f6912b8ec4702cee",
-				  // reward_address - CBOR byte array
-				  3: "0x00588e8e1d18cba576a4d35758069fe94e53f638b6faf7c07b8abd2bc5c5cdee47b60edc7772855324c85033c638364214cbfc6627889f81c4",
-				  // nonce
-				  4: 5479467
-				  // voting_purpose: 0 = Catalyst
-				  5: 0
+				  1: [[<vote_public_key_1>, <vote_weight_1>], [<vote_public_key_2>, <vote_weight_2>]],	// delegations - byte array(s) of the voting_public_keys and the relative voting_weight(unsigned int)
+				  2: <stake_public_key>, // stake_pub - byte array
+				  3: <stake_rewards_address>, // reward_address - byte array
+				  4: <nonce> // nonce = slotHeight (tip)
+				  5: <voting_purpose> // voting_purpose: 0 = Catalyst
 			}
 			*/
 			const delegationMap = new Map().set(61284,new Map().set(1,vote_delegation_array).set(2,Buffer.from(pubKey,'hex')).set(3,Buffer.from(rewards_addr_hex,'hex')).set(4,nonce).set(5,vote_purpose));
@@ -472,7 +473,12 @@ async function main() {
 			var signature = Buffer.from(signedBytes).toString('hex');
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
-			//build the full registration map by adding the root key 61285 and the signature in key 1 below that
+			/*
+			build the full registration map by adding the root key 61285 and the signature in key 1 below that
+			61285 : {
+				   1: <signature>  // signed signature from the stake_secret_key
+			}
+			*/
 			const registrationMap = delegationMap.set(61285,new Map().set(1,Buffer.from(signature,'hex')))
 
 			//convert it to a cbor hex string

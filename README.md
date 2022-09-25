@@ -19,7 +19,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.6.0
+cardano-signer 1.6.1
 
 Signing a hex/text-string or a binary-file:
 
@@ -232,29 +232,32 @@ true
 
 ## Release Notes
 
+* **1.6.1**
+	- Added new check in CIP-36 mode to avoid duplicated voting_key entries in the delegations. Exits with an error if duplicates are found.
+
 * **1.6.0**
-   - New Syntax - Now you can use the parameter `--data-file` to use any binary file as the data source to sign.
-   - Added the function to directly use bech encoded secret and public keys for the signing/verification. You can mix the formats.
+	- New Syntax - Now you can use the parameter `--data-file` to use any binary file as the data source to sign.
+	- Added the function to directly use bech encoded secret and public keys for the signing/verification. You can mix the formats.
 
 * **1.5.0**
-   - New CIP-36 mode via parameter `--cip36`. This enables the new catalyst/governance registration and votingpower (multi-)delegation mode. Output generates a signed cbor file or hex_string.
+	- New CIP-36 mode via parameter `--cip36`. This enables the new catalyst/governance registration and votingpower (multi-)delegation mode. Output generates a signed cbor file or hex_string.
 
 * **1.4.0**
-   - New CIP-8 mode via parameter `--cip8`. This enables CIP-8 conform payload signing. 
-   - New Syntax - Now you can use the parameter `--data` for pure text payloads, and `--data-hex` for hex-encoded payloads. 
+	- New CIP-8 mode via parameter `--cip8`. This enables CIP-8 conform payload signing. 
+	- New Syntax - Now you can use the parameter `--data` for pure text payloads, and `--data-hex` for hex-encoded payloads. 
 
 * **1.3.0**
-   - Now supporting true parameter/flag names.
-   - Added new optional `--out-file` option, which would write the signature+publicKey to a file and not to the standard output.
+	- Now supporting true parameter/flag names.
+	- Added new optional `--out-file` option, which would write the signature+publicKey to a file and not to the standard output.
 
 * **1.2.0**
-   - Added support to use Cardano-Key-Files in addition to a direct Key-Hexstring. Supports standard sKey/vKey JSON files and also files with a Bech32-Key in it, like the ones generated via jcli
+	- Added support to use Cardano-Key-Files in addition to a direct Key-Hexstring. Supports standard sKey/vKey JSON files and also files with a Bech32-Key in it, like the ones generated via jcli
 
 * **1.1.0**
-   - Added functionality to do also a Verification of the Signature together with the data and the Public Key.
+	- Added functionality to do also a Verification of the Signature together with the data and the Public Key.
 
 * **1.0.0**
-   - Initial version, supports signing of a Data-Hexstring string with a Key-Hexstring.
+	- Initial version, supports signing of a Data-Hexstring string with a Key-Hexstring.
 
 <br>
 <br>
