@@ -19,7 +19,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.7.0
+cardano-signer 1.8.0
 
 Signing a hex/text-string or a binary-file:
 
@@ -38,23 +38,24 @@ Signing a payload in CIP-8 mode:
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
-           --address "<bech_address>"                           signing address (bech format like 'stake1_...')
+           --address "<bech_address>"                           signing address (bech format like 'stake1..., stake_test1...')
+           [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "signature_hex + publicKey_hex" or JSON-Format
 
 
-Signing a catalyst registration/delegation in CIP-36 mode:
+Signing a catalyst registration/delegation/deregistration in CIP-36 mode:
 
    Syntax: cardano-signer sign --cip36
-   Params: --vote-public-key "<path_to_file>|<hex>|<bech>"      public-key-file or public hex/bech-key string to delegate the votingpower to
-           --vote-weight <unsigned_int>                         relative weight of the delegated votingpower, default: 1 (=100% for single delegation)
-           [--vote-public-key "<path_to_file>|<hex>|<bech>"     additional public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to
-           --vote-weight <unsigned_int>]                        additional relative weight(s) of the delegated votingpower, default: 1 (=100% for single delegation)
+   Params: [--vote-public-key "<path_to_file>|<hex>|<bech>"     public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)
+           --vote-weight <unsigned_int>]                        relative weight of each delegated votingpower, default: 100% for a single delegation
            --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)
-           --rewards-address "<bech_address>"                   rewards stake address (bech format like 'stake1_...')
-           --nonce <unsigned_int>                               nonce value, this is typically the slotheight(tip) of the chain
+           --rewards-address "<bech_address>"                   rewards stake address (bech format like 'stake1..., stake_test1...')
+           [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
            [--vote-purpose <unsigned_int>]                      optional parameter (unsigned int), default: 0 (catalyst)
+           [--deregister]                                       optional flag to generate an empty delegation (=deregistration), votingpower/rewardsaddress will be ignored
+           [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format, default: cborHex
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
            [--out-cbor "<path_to_file>"]                        path to write a binary metadata.cbor file to
@@ -74,7 +75,8 @@ Verifying a hex/text-string or a binary-file(data) via signature + publicKey:
 
 ```
 
-![image](https://user-images.githubusercontent.com/47434720/192148919-4757f034-9044-4d3d-ae30-175a592d41fd.png)
+![image](https://user-images.githubusercontent.com/47434720/193452839-c8bdcfa3-cd63-4b40-a3a1-4f547449f7a4.png)
+
 
 <br>
 <br>
@@ -139,7 +141,8 @@ caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bca
 $ cardano-signer sign --cip8 \
       --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
       --data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
-      --secret-key myStakeKey.skey
+      --secret-key myStakeKey.skey \
+      --testnet-magic 1
       
 5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
 
@@ -147,6 +150,7 @@ $ cardano-signer sign --cip8 \
 	--address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
 	--data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
 	--secret-key myStakeKey.skey \
+	--testnet-magic 1 \
 	--json-extended
 
 {
@@ -164,7 +168,8 @@ $ cardano-signer sign --cip8 \
 $ cardano-signer sign --cip8 \
       --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
       --data-hex "7b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d" \
-      --secret-key myStakeKey.skey
+      --secret-key myStakeKey.skey \
+      --testnet-magic 1
 
 5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
 ```
@@ -174,13 +179,38 @@ $ cardano-signer sign --cip8 \
 ### Signing (CIP-36 mode) - Catalyst Voting Registration / VotingPower Delegation
 
 ``` console
-### REGISTER/DELEGATE TO A SINGLE VOTING-KEY
+### REGISTER/DELEGATE TO A SINGLE VOTING-KEY WITH MINIMAL PARAMETERS (Mainnet example)
+
+$ cardano-signer sign --cip36 \
+	--rewards-address "stake1u55c9gha99xz3dnxxeczsr3f4kj23zs4mtpst3szlztengsv62rry" \
+	--vote-public-key test.voting.vkey \
+	--secret-key myStakeKey.skey \
+	--json
+
+Output: (Nonce automatically calculated from current machine time)
+{
+  "61284": {
+    "1": [
+      [ "0xc2cd50d8a231fbc1488d65abab4f6bf74178e6de64722558eeef0b73de293a8a", 1 ]
+    ],
+    "2": "0x57758911253aa6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0",
+    "3": "0xe1e382a2fd294c28b7763670280e29ada4a88a15dac305c602f89799a2",
+    "4": 73146002,
+    "5": 0
+  },
+  "61285": {
+    "1": "0x4a96002...3278ea09"
+  }
+}
+
+### REGISTER/DELEGATE TO A SINGLE VOTING-KEY MORE PARAMETERS
 
 $ cardano-signer sign --cip36 \
       --rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
       --secret-key ../owner.staking.skey \
       --vote-public-key somevote.vkey \
       --nonce 71948552 \
+      --testnet-magic 1 \
       --out-cbor catalyst-delegation.cbor
 
 a219ef64a5018182582057758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0010258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840c839244556db17a2df914c7291c891e5abd1bd580de7786d640da9e27983efe86495cbee900eb685c08e367e778bb0860c6e366b9ec715d8fba824ef55c8aa0f
@@ -197,6 +227,7 @@ $ cardano-signer sign --cip36 \
       --vote-public-key "ed25519_pk128c305nw9xh20kearuhcwj447kzlvxdfttkk6uwnrf6qfjm9276svd678w" \
       --vote-weight 70 \
       --nonce 71948552 \
+      --testnet-magic 1 \
       --out-cbor catalyst-multidelegation.cbor
       
 a219ef64a5018382582099d1d0c4cdc8a4b206066e9606c6c3729678bd7338a8eab9bffdffa39d3df9580a825820c2cd50d8a231fbc1444d65abab4f6bf74178e6de64722558eeef0b73de293a8a1482582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b518460258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840ecce4b2e10146857b9f583ce01b10a26726022963d47fd61d0fbb67b543428fa46315d4e35b2ab73e7e15f620883176422a19e780a751d71ac488053365e6402
@@ -205,8 +236,9 @@ $ cardano-signer sign --cip36 \
 	--rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
 	--secret-key "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a" \
 	--vote-public-key ../myvote.voting.pkey --vote-weight 1 \
-	--vote-public-key martin-test.vkey --vote-weight 5 \
+	--vote-public-key vote-test.vkey --vote-weight 5 \
 	--nonce 123456789 \
+	--testnet-magic 1 \
 	--json-extended
 
 {
@@ -295,6 +327,17 @@ true
 <br>
 
 ## Release Notes
+
+* **1.8.0**
+  #### CIP-36 mode updates:
+	- Allow duplicated voting_key entries
+	- New check to avoid using a wrong vote-public-key or a wrong stake secret-key. Because the public-key of the signing secret-key must be different than the entries in the delegations array.
+	- New check that the total-vote-weight is not zero
+	- Added the fields `votePurpose` and `totalVoteWeight` to the `--json-extended` output-mode
+	- Syntax Update: Added flag `--deregister` to generate an empty delegation array, no voting_keys or rewards address is needed using that flag
+	- Syntax Update: If no `--nonce` parameter is provided, cardano-signer automatically calculates the Mainnet slotHeight from the current machine time and uses it as the nonce
+  #### General:
+  - Syntax Update: Added parameter `--testnet-magic [xxx]` to CIP-8 and CIP-36 mode to allow an additional check about the right bech-address format. (Default = mainnet)
 
 * **1.7.0**
 	- Added JSON and JSON-Extended output format: Default output format is plaintext, using the `--json` flag generates a JSON output. Using the `--json-extended` flag generates a JSON output with much more information.
