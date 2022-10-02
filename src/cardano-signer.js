@@ -1,5 +1,5 @@
 const appname = "cardano-signer"
-const version = "1.7.0"
+const version = "1.8.0"
 
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
 const cbor = require("cbor");
@@ -13,7 +13,6 @@ const regExpHex = /^[0-9a-fA-F]+$/;
 process.on('uncaughtException', function (error) {
     console.error(`${error}`); process.exit(1);
 });
-
 
 function showUsage(){
 //FontColors
@@ -38,23 +37,24 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
 	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
 	console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
 	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
-	console.log(`           ${FgGreen}--address${Reset} "<bech_address>" 				${Dim}signing address (bech format like 'stake1_...')${Reset}`);
+	console.log(`           ${FgGreen}--address${Reset} "<bech_address>" 				${Dim}signing address (bech format like 'stake1..., stake_test1...')${Reset}`);
+	console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
         console.log(`   Output: ${FgCyan}"signature_hex + publicKey_hex"${Reset} or ${FgCyan}JSON-Format${Reset}`);
         console.log(``)
         console.log(``)
-        console.log(`${Bright}${Underscore}Signing a catalyst registration/delegation in CIP-36 mode:${Reset}`)
+        console.log(`${Bright}${Underscore}Signing a catalyst registration/delegation/deregistration in CIP-36 mode:${Reset}`)
         console.log(``)
         console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip36${Reset}`);
-	console.log(`   Params: ${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to delegate the votingpower to${Reset}`);
-	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>				${Dim}relative weight of the delegated votingpower, default: 1 (=100% for single delegation)${Reset}`);
-	console.log(`           [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}additional public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to${Reset}`);
-	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>]			${Dim}additional relative weight(s) of the delegated votingpower, default: 1 (=100% for single delegation)${Reset}`);
+	console.log(`   Params: [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)${Reset}`);
+	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>]			${Dim}relative weight of each delegated votingpower, default: 100% for a single delegation${Reset}`);
 	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)${Reset}`);
-	console.log(`           ${FgGreen}--rewards-address${Reset} "<bech_address>"			${Dim}rewards stake address (bech format like 'stake1_...')${Reset}`);
-	console.log(`           ${FgGreen}--nonce${Reset} <unsigned_int>				${Dim}nonce value, this is typically the slotheight(tip) of the chain${Reset}`);
+	console.log(`           ${FgGreen}--rewards-address${Reset} "<bech_address>"			${Dim}rewards stake address (bech format like 'stake1..., stake_test1...')${Reset}`);
+	console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
 	console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
+	console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate an empty delegation (=deregistration), votingpower/rewardsaddress will be ignored${Reset}`);
+	console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex${Reset}`);
 	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	console.log(`           [${FgGreen}--out-cbor${Reset} "<path_to_file>"]			${Dim}path to write a binary metadata.cbor file to${Reset}`);
@@ -89,11 +89,15 @@ function trimString(s){
 
 function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json, a direct hex entry or a bech-string  // returns a hexstring of the key
 
+	//inputs:
+	//	key -> string that points to a file or direct data
+	//	type -> string 'secret' or 'public'
+
 	var key_hex = "";
 
 	switch (type) {
 
-		case "secret": //convert a secret key into a hex string
+		case "secret": //convert a secret key into a hex string, always returns the full privat-key-hex (extended or non-extended)
 
 			// try to use the parameter as a filename for a cardano skey json with a cborHex entry
 			try {
@@ -131,7 +135,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 			break;
 
 
-		case "public": //convert a public key into a hex string
+		case "public": //convert a public key into a hex string, always return a non-extended public-key-hex
 
 			// try to use the parameter as a filename for a cardano vkey json with a cborHex entry
 			try {
@@ -141,7 +145,7 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
 				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The public key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
-				return key_hex;
+				return key_hex.substring(0,64); //return a non-extended public key
 			} catch (error) {}
 
 			// try to use the parameter as a filename for a bech encoded string in it (typical keyfiles generated via jcli)
@@ -151,21 +155,21 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 					const tmp_key = CardanoWasm.PublicKey.from_bech32(content); //temporary key to check about bech32 format
 					key_hex = Buffer.from(tmp_key.as_bytes()).toString('hex');
 				 } catch (error) { console.error(`Error: The content in file '${key}' is not a valid bech public key`); process.exit(1); }
-				return key_hex;
+				return key_hex.substring(0,64); //return a non-extended public key
 			} catch (error) {}
 
 			// try to use the parameter as a bech encoded string
 			try {
 				const tmp_key = CardanoWasm.PublicKey.from_bech32(key); //temporary key to check about bech32 format
 				key_hex = Buffer.from(tmp_key.as_bytes()).toString('hex');
-				return key_hex;
+				return key_hex.substring(0,64); //return a non-extended public key
 			} catch (error) {}
 
 			// try to use the parameter as a direct hex string
 			key_hex = trimString(key.toLowerCase());
 			//check that the given key is a hex string
-			if ( ! regExpHex.test(key) ) { console.error(`Error: Provided public key '${key}' is not a valid public key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
-			return key_hex;
+			if ( ! regExpHex.test(key) || key_hex.length < 64 ) { console.error(`Error: Provided public key '${key}' is not a valid public key. Or not a hex string, bech encoded key, or the file is missing`); process.exit(1); }
+			return key_hex.substring(0,64); //return a non-extended public key
 			break;
 
 	} //switch (type)
@@ -177,6 +181,7 @@ function getHash(content) { //hashes a given hex-string content with blake2b_256
     h.update(Buffer.from(content, 'hex'));
     return h.digest("hex")
 }
+
 
 // MAIN
 //
@@ -200,7 +205,11 @@ function getHash(content) { //hashes a given hex-string content with blake2b_256
 //   --rewards-address -> rewards stake address
 //             --nonce -> nonce, typically the slotheight(tip) of the chain
 //      --vote-purpose -> optional unsigned_int parameter, default: 0 (catalyst)
-//          --out-file -> binary metadata.cbor file
+//        --deregister -> optionsl flag to produce an empty delegation array (deregistration) 
+//              --json -> optional flag to produce a json output
+//     --json-extended -> optional flag to produce an extended json output
+//          --out-file -> path to an output file
+//          --out-cbor -> path to a binary metadata.cbor output file
 //
 // workMode: verify (defaultmode without flags)
 // --data / --data-hex -> textdata / hexdata that should be verified
@@ -350,6 +359,13 @@ async function main() {
 				var sign_addr_hex = CardanoWasm.Address.from_bech32(sign_addr).to_hex();
 			} catch (error) { console.error(`Error: The CIP-8 signing address '${sign_addr}' is not a valid bech address`); process.exit(1); }
 
+			//check that the given address belongs to the current network
+			//checks the second char (lower part of the first address byte) if its 1 for mainnet and 0 for testnets
+			if ( (sign_addr_hex.substring(1,2) == "1") && !(typeof args['testnet-magic'] === 'undefined') ) { // check for mainnet address
+				console.error(`Error: The mainnet address '${sign_addr}' does not match your current '--testnet-magic xxx' setting.`); process.exit(1); }
+			else if ( (sign_addr_hex.substring(1,2) == "0") && (typeof args['testnet-magic'] === 'undefined') ) { // check for testnet address
+				console.error(`Error: The testnet address '${sign_addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`); process.exit(1); }
+
 			//generate the Signature1 inner cbor (single signing key)
 			const signature1_cbor = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr_hex,'hex')))).toString('hex')
 
@@ -409,14 +425,27 @@ async function main() {
 
                 case "sign-cip36":  //SIGN DATA IN CIP-36 MODE (Catalyst)
 
-			//get rewards stakeaddress in bech format
-			var rewards_addr = args['rewards-address'];
-		        if ( typeof rewards_addr === 'undefined' || rewards_addr === true ) { console.error(`Error: Missing rewards stake address (bech-format)`); process.exit(1); }
-		        rewards_addr = trimString(rewards_addr.toLowerCase());
-			if ( rewards_addr.substring(0,5) != 'stake' ) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a stake address`); process.exit(1); }
-			try {
-				var rewards_addr_hex = CardanoWasm.Address.from_bech32(rewards_addr).to_hex();
-			} catch (error) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a valid bech address`); process.exit(1); }
+			if ( ! args['deregister'] === true ) { //only use a rewards stakeaddress if its no deregistration
+
+				//get rewards stakeaddress in bech format
+				var rewards_addr = args['rewards-address'];
+			        if ( typeof rewards_addr === 'undefined' || rewards_addr === true ) { console.error(`Error: Missing rewards stake address (bech-format)`); process.exit(1); }
+			        rewards_addr = trimString(rewards_addr.toLowerCase());
+				if ( rewards_addr.substring(0,5) != 'stake' ) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a stake address`); process.exit(1); }
+				try {
+					var rewards_addr_hex = CardanoWasm.Address.from_bech32(rewards_addr).to_hex();
+				} catch (error) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a valid bech address`); process.exit(1); }
+
+				//check that the given address belongs to the current network
+				//checks the second char (lower part of the first address byte) if its 1 for mainnet and 0 for testnets
+				if ( (rewards_addr_hex.substring(1,2) == "1") && !(typeof args['testnet-magic'] === 'undefined') ) { // check for mainnet address
+					console.error(`Error: The mainnet address '${rewards_addr}' does not match your current '--testnet-magic xxx' setting.`); process.exit(1); }
+				else if ( (rewards_addr_hex.substring(1,2) == "0") && (typeof args['testnet-magic'] === 'undefined') ) { // check for testnet address
+					console.error(`Error: The testnet address '${rewards_addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`); process.exit(1); }
+
+			} else { //deregistration, no rewards_addr_hex needed
+					var rewards_addr_hex = '';
+			}
 
 			//get signing key -> store it in sign_key
 			var key_file_hex = args['secret-key'];
@@ -431,50 +460,70 @@ async function main() {
 						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(sign_key.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars)
 			} catch (error) { console.log(`Error: ${error}`); process.exit(1); }
 
-			//generate the public key from the secret key for external verification
+			//generate the public key from the secret signing stake key
 			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
 
-			//get deleg vote public key(s) -> store it in vote_public_key
-			var vote_public_key = args['vote-public-key'];
-		        if ( typeof vote_public_key === 'undefined' || vote_public_key === true ) { console.error(`Error: Missing vote public key(s) parameter`); process.exit(1); }
 
-			//if there is only one --vote-public-key parameter present, convert it to an array
-		        if ( typeof vote_public_key === 'string' ) { vote_public_key = [ vote_public_key ]; }
-		        if ( typeof vote_public_key === 'number' || vote_public_key === true ) { console.error(`Error: You've provided a number as a public key`); process.exit(1); }
+			//do a normal registration with provided vote_public_keys, or do a deregistration with an empty delegation array (--deregister)
+			//--deregister must be specified as an extra flag to avoid deregistrations by accident
+			var vote_delegation_array = [];
+			var all_vote_keys_array = [];  //used to check for duplicates later
+			var all_weights_array = [];  //used for an extended json output later
+			var total_vote_weight = 0;	//used to calculate the total-vote-weight. this must be higher than zero. otherwise all vote-weights are zero -> edge case
 
-			//get deleg voting weight -> store it in vote_weight
-			var vote_weight = args['vote-weight'];
-		        if ( typeof vote_weight === 'undefined' ) { vote_weight = 1 }
-			if ( vote_weight === true ) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value > 0`); process.exit(1); }
+			if ( ! args['deregister'] === true ) { //generate a delegation array with --vote-public-key, --vote-weight checks. if --deregister is set, leave it empty
 
-			//if there is only one --vote-weight parameter present, convert it to an array
-		        if ( typeof vote_weight === 'number' ) { vote_weight = [ vote_weight ]; }
+				//get deleg vote public key(s) -> store it in vote_public_key
+				var vote_public_key = args['vote-public-key'];
+			        if ( typeof vote_public_key === 'undefined' || vote_public_key === true ) { console.error(`Error: Missing vote public key(s) parameter. For a deregistration please use the flag --deregister.`); process.exit(1); }
 
-			//if not the same amounts of vote_public_keys and vote_weights provided, show an error
-			if ( vote_public_key.length != vote_weight.length ) { console.error(`Error: Not the same count of --vote-public-key(` + vote_public_key.length + `) and --vote-weight(` + vote_weight.length + `) parameters`); process.exit(1); }
+				//if there is only one --vote-public-key parameter present, convert it to an array
+			        if ( typeof vote_public_key === 'string' ) { vote_public_key = [ vote_public_key ]; }
+			        if ( typeof vote_public_key === 'number' || vote_public_key === true ) { console.error(`Error: You've provided a number as a public key`); process.exit(1); }
 
-			//build the vote_delegation array
-			const vote_delegation_array = [];
-			const all_vote_keys_array = [];  //used to check for duplicates later
-			const all_weights_array = [];  //used for an extended json output later
-			for (let cnt = 0; cnt < vote_public_key.length; cnt++) {
-				entry_vote_public_key = vote_public_key[cnt]
-			        if ( typeof entry_vote_public_key === 'number' || entry_vote_public_key === true ) { console.error(`Error: Invalid public key parameter found, please use a filename or a hex string`); process.exit(1); }
-				entry_vote_public_key_hex = readKey2hex(entry_vote_public_key, 'public');
-				entry_vote_weight = vote_weight[cnt] + 0;
-				if (typeof entry_vote_weight !== 'number' || entry_vote_weight <= 0) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value > 0`); process.exit(1); }
-				vote_delegation_array.push([Buffer.from(entry_vote_public_key_hex.substring(0,64),'hex'),entry_vote_weight]) //during the push, only use the first 32bytes (64chars) of the public_key_hex
-				all_vote_keys_array.push(entry_vote_public_key_hex.substring(0,64)) //collect all hex public keys in an extra array to quickly find duplicates afterwards
-				all_weights_array.push(entry_vote_weight) //collect all voting weights in an extra array for an extended json output later
-			}
+				//get deleg voting weight -> store it in vote_weight
+				var vote_weight = args['vote-weight'];
+			        if ( typeof vote_weight === 'undefined' ) { vote_weight = 1 }
+				if ( vote_weight === true ) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value >= 0`); process.exit(1); }
 
-			//check for duplicated key entries
-			hasDuplicates = all_vote_keys_array.some((element, index) => { return all_vote_keys_array.indexOf(element) !== index });
-			if (hasDuplicates) { console.error(`Error: Duplicated resolved vote-public-key entries found. Please only use a vote-public-key one time in a delegation.`); process.exit(1); }
+				//if there is only one --vote-weight parameter present, convert it to an array
+			        if ( typeof vote_weight === 'number' ) { vote_weight = [ vote_weight ]; }
+
+				//if not the same amounts of vote_public_keys and vote_weights provided, show an error
+				if ( vote_public_key.length != vote_weight.length ) { console.error(`Error: Not the same count of --vote-public-key(` + vote_public_key.length + `) and --vote-weight(` + vote_weight.length + `) parameters`); process.exit(1); }
+
+				//build the vote_delegation array
+				for (let cnt = 0; cnt < vote_public_key.length; cnt++) {
+					entry_vote_public_key = vote_public_key[cnt]
+				        if ( typeof entry_vote_public_key === 'number' || entry_vote_public_key === true ) { console.error(`Error: Invalid public key parameter found, please use a filename or a hex string`); process.exit(1); }
+					entry_vote_public_key_hex = readKey2hex(entry_vote_public_key, 'public');
+					entry_vote_weight = vote_weight[cnt];
+					if (typeof entry_vote_weight !== 'number' || entry_vote_weight < 0) { console.error(`Error: Please specify a --vote-weight parameter with an unsigned integer value >= 0`); process.exit(1); }
+					vote_delegation_array.push([Buffer.from(entry_vote_public_key_hex,'hex'),entry_vote_weight]) //add the entry to the delegation array
+					all_vote_keys_array.push(entry_vote_public_key_hex) //collect all hex public keys in an extra array to quickly find duplicates/public-signing-key-compare afterwards
+					all_weights_array.push(entry_vote_weight) //collect all voting weights in an extra array for an extended json output later
+					total_vote_weight += entry_vote_weight //sums up all the weights to do a check against zero at the end
+				}
+
+				/* removed duplicates check with v1.7.1
+				 //check for duplicated key entries
+				 hasDuplicates = all_vote_keys_array.some((element, index) => { return all_vote_keys_array.indexOf(element) !== index });
+				 if (hasDuplicates) { console.error(`Error: Duplicated resolved vote-public-key entries found. Please only use a vote-public-key one time in a delegation.`); process.exit(1); }
+				*/
+
+				//check that no vote-public-key is identical with the public-key of the signing secret key. vote-public-key is derived from a different path, so a match would be a wrong vote-public-key
+				if (all_vote_keys_array.indexOf(pubKey) > -1) { console.error(`Error: Wrong vote-public-key entry found, or your secret-key is a wrong one. The vote-public-key(s) must be different from the public-key of the signing stake-secret-key.`); process.exit(1); }
+
+				//check that the total_vote_weight is not zero
+				if (total_vote_weight == 0) { console.error(`Error: Total vote-weight is zero, please make sure that at least one vote-public-key has a vote-weight > 0`); process.exit(1); }
+
+			} //end if --deregistration flag check
+
 
 			//get the --nonce parameter
 			var nonce = args['nonce'];
-		        if ( typeof nonce !== 'number' || nonce === true ) { console.error(`Error: Please specify a --nonce parameter with an unsigned integer value`); process.exit(1); }
+		        if ( typeof nonce === 'undefined' ) { var totalUtcSeconds = Math.floor(new Date().getTime() / 1000); nonce = 4492800 + (totalUtcSeconds - 1596059091) }  //if not defined, set it to the slotHeight of cardano-mainnet
+		        else if ( typeof nonce !== 'number' || nonce === true ) { console.error(`Error: Please specify a --nonce parameter with an unsigned integer value, or remove the parameter so the mainnet slotHeight will be calculated from current time`); process.exit(1); }
 
 			//get the --vote-purpose parameter, set default = 0
 			var vote_purpose_param = args['vote-purpose'];
@@ -482,6 +531,13 @@ async function main() {
 		        if ( typeof vote_purpose_param === 'undefined' ) { vote_purpose = 0 }  //if not defined, set it to default=0
 		        else if ( typeof vote_purpose_param === 'number' && vote_purpose_param >= 0 ) { vote_purpose = vote_purpose_param }
 			else { console.error(`Error: Please specify a --vote-purpose parameter with an unsigned integer value`); process.exit(1); }
+
+
+			//get a cleartext description of the purpose (shown in the --json-extended output
+			switch (vote_purpose) {
+				case 0: var vote_purpose_description="Catalyst"; break;
+				default: var vote_purpose_description="Unknown";
+			}
 
 			/*
 			build the delegation map
@@ -532,7 +588,7 @@ async function main() {
 				for (let cnt = 0; cnt < all_vote_keys_array.length; cnt++) {
 				delegations.push(`[ "0x${all_vote_keys_array[cnt]}", ${all_weights_array[cnt]} ]`)
 				}
-				content += `"registrationCBOR": "${registrationCBOR}", "registrationJSON": { "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr_hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } } , "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
+				content += `"registrationCBOR": "${registrationCBOR}", "registrationJSON": { "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr_hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } } , "votePurpose": "${vote_purpose_description}", "totalVoteWeight": ${total_vote_weight}, "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
 			} else { //generate content in text format
 				var content = `${registrationCBOR}`;
 			}
@@ -607,7 +663,7 @@ async function main() {
 
 			//load the public key
 			try {
-			var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(public_key.substring(0,64),'hex')); //only use the first 32 bytes (64 chars)
+			var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(public_key,'hex'));
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
 			//load the Ed25519Signature
