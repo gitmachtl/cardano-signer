@@ -19,7 +19,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.9.0
+cardano-signer 1.10.0
 
 Signing a hex/text-string or a binary-file:
 
@@ -27,6 +27,7 @@ Signing a hex/text-string or a binary-file:
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
+           [--address "<bech_address>"]                         optional address check against the signing-key (bech format like 'stake1..., addr1...')
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "signature_hex + publicKey_hex" or JSON-Format
@@ -69,94 +70,177 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
                                                                 data/payload/file to verify in hex-, text- or binary-file-format
            --signature "<hex>"                                  signature in hexformat
            --public-key "<path_to_file>|<hex>|<bech>"           path to a public-key-file or a direct public hex/bech-key string
+           [--address "<bech_address>"]                         optional address check against the public-key (bech format like 'stake1..., addr1...')
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 ```
 
-![image](https://user-images.githubusercontent.com/47434720/197326961-31b8be92-22cf-42e4-b901-9d6212e1ff32.png)
+![image](https://user-images.githubusercontent.com/47434720/198969929-c48eb34d-b1a9-41d2-b43c-1858a3de9938.png)
 
 <br>
 <br>
 
-## Examples
+## Examples - Signing data in normal mode
 
-### Signing (in defaultmode)
-
+### Sign text-data with a KEY-FILE (.skey)
 ``` console
-### SIGN HEXDATA OR TEXTDATA WITH A KEY-HEXSTRING
+cardano-signer sign --data "this is a test payload :-)" \
+		    --secret-key test.skey
+```
+Output - Signature & publicKey (hex) :
+```
+8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
+```
+You can generate a nice json output via the `--json` flag
+``` console
+cardano-signer sign --data "this is a test payload :-)" \
+                    --secret-key test.skey \
+		    --json
+```
+``` json
+{ 
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0" 
+}
+```
+You can generate a more detailed json output via the `--json-extended` flag
+``` console
+cardano-signer sign --data "this is a test payload :-)" \
+                    --secret-key test.skey \
+		    --json-extended
+```
+``` json
+{
+  "workMode": "sign",
+  "signDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "secretKey": "e8ddb1cfc09e163915e6c28fcb5fbb563bfef57201857e15288b67abbd91e4441e5fa179a8f90da1684ba5aa310da521651d2ce20443f149f8ca9e333a96dabc",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+}
+```
+You can also do an optional address check, if the address belongs to the key.
+``` console
+cardano-signer sign --data "this is a test payload :-)" \
+                    --secret-key test.skey \
+		    --json-extended \
+		    --address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d"
+```
+If the address is wrong you will get an error like:
+```
+Error: The address 'addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d' does not belong to the provided secret key.
+```
+If the address is correct, cardano-signer outputs like normal. In case of the detailed json output it also includes the address.
+``` json
+{
+  "workMode": "sign",
+  "signDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "address": "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d",
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "secretKey": "e8ddb1cfc09e163915e6c28fcb5fbb563bfef57201857e15288b67abbd91e4441e5fa179a8f90da1684ba5aa310da521651d2ce20443f149f8ca9e333a96dabc",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+}
+```
 
-$ cardano-signer sign \
+> :bulb: For **verification**, check out the [Examples](#examples---verification) below too!
+
+<br>
+
+### Sign hex-data with a KEY-HEXSTRING
+``` console
+cardano-signer sign \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --secret-key "c14ef0cc5e352446d6243976f51e8ffb2ae257f2a547c4fba170964a76501e7a"
-      
-Output (cbor-hex):
+```
+Output - Signature & publicKey (hex) :
+```
 ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03 9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27
-
-$ cardano-signer sign \
+```
+You can also write out to a file of course.
+``` console
+cardano-signer sign \
       --out-file mySignature.txt \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --secret-key "c14ef0cc5e352446d6243976f51e8ffb2ae257f2a547c4fba170964a76501e7a"
-#Signature+publicKey was written to the file mySignature.txt
+```
+No visible output was generated to the stdout, but Signature+publicKey was written to the file mySignature.txt<br>
 
-$ cardano-signer sign \
+Here are two examples for invalid input secret keys:
+``` console
+cardano-signer sign \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --secret-key "c14ef0cc5e352446d6243976f51e8ffb2ae257f2a547c4fba170964a"
+```
+```
 Error: Invalid normal secret key
-
-$ cardano-signer sign \
+```
+``` console
+cardano-signer sign \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --secret-key "c14ef0cc5e352446d6243976f51e8ffb2ae257f2a547c4fba170964a76501e7a88afe88fa8f888544e6f5a5f555e5faf6f6f"
+```
+```
 Error: Invalid extended secret key
-
-### SIGN HEXDATA OR TEXTDATA WITH A KEY-FILE
-
-$ cardano-signer sign \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --secret-key owner.staking.skey
-      
-Output (cbor-hex):
-ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03 9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27
-
-$ cardano-signer sign \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --secret-key owner.staking.vkey
-Error: The file 'owner.staking.vkey' is not a signing/secret key json
-
-### SIGN A FILE WITH A KEY-FILE
-
-$ cardano-signer sign --data-file test.txt --secret-key test.skey
-
-Output (cbor-hex):
-caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
-
 ```
 
 <br>
 
-### Signing (CIP-8 mode)
+### Sign hex-data with a KEY-FILE (.skey)
+``` console
+cardano-signer sign \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --secret-key owner.staking.skey
+```
+Output - Signature & publicKey (hex) :
+```
+ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03 9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27
+```
+``` console
+cardano-signer sign \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --secret-key owner.staking.vkey
+Error: The file 'owner.staking.vkey' is not a signing/secret key json
+```
+
+<br>
+
+### Sign a file with a KEY-FILE (.skey)
+``` console
+cardano-signer sign --data-file test.txt --secret-key test.skey
+```
+Output - Signature & publicKey (hex) :
+```
+caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
+```
+
+<br>
+
+## Examples - Signing data in CIP-8 mode
+
+### Sign some text-data payload
 
 ``` console
-### SIGN TEXTDATA IN CIP-8 MODE
-
-$ cardano-signer sign --cip8 \
+cardano-signer sign --cip8 \
       --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
       --data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
       --secret-key myStakeKey.skey \
       --testnet-magic 1
-      
-Output (cbor-hex):
+```
+Output - Signature & publicKey (hex) :
+```
 5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
-
-$ cardano-signer sign --cip8 \
+```
+Or with the more detailed json output:
+``` console
+cardano-signer sign --cip8 \
 	--address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
 	--data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
 	--secret-key myStakeKey.skey \
 	--testnet-magic 1 \
 	--json-extended
-
-Output (extended-json):
+```
+``` json
 {
   "workMode": "sign-cip8",
   "addressHex": "e0171983a1178a55b02afacfd6ad6b516da375469fd7dbcf54a2f95823",
@@ -166,33 +250,37 @@ Output (extended-json):
   "secretKey": "e8ddb1cfc09e163915e6c28fcb5fbb563bfef57201857e15288b67abbd91e4441e5fa179a8f90da1684ba5aa310da521651d2ce20443f149f8ca9e333a96dabc",
   "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
 }
+```
 
-### SIGN HEXDATA IN CIP-8 MODE
+<br>
 
-$ cardano-signer sign --cip8 \
+### Sign hex-data payload
+``` console
+cardano-signer sign --cip8 \
       --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
       --data-hex "7b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d" \
       --secret-key myStakeKey.skey \
       --testnet-magic 1
-
-Output (cbor-hex):
+```
+Output - Signature & publicKey (hex) :
+```
 5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
 ```
 
 <br>
 
-### Signing (CIP-36 mode) - Catalyst Voting Registration / VotingPower Delegation
+## Examples - Signing in CIP-36 mode (Catalyst Voting Registration / VotingPower Delegation)
 
+### Register/Delegate to a single voting-key with minimal parameters (Mainnet example)
 ``` console
-### REGISTER/DELEGATE TO A SINGLE VOTING-KEY WITH MINIMAL PARAMETERS (Mainnet example)
-
-$ cardano-signer sign --cip36 \
+cardano-signer sign --cip36 \
 	--rewards-address "stake1u55c9gha99xz3dnxxeczsr3f4kj23zs4mtpst3szlztengsv62rry" \
 	--vote-public-key test.voting.vkey \
 	--secret-key myStakeKey.skey \
 	--json
-
-Output (json): (Nonce automatically calculated from current machine time)
+```
+The output in json format (Nonce automatically calculated from current machine time):
+``` json
 {
   "61284": {
     "1": [
@@ -207,23 +295,43 @@ Output (json): (Nonce automatically calculated from current machine time)
     "1": "0x4a96002...3278ea09"
   }
 }
+```
+If you write out the output to a file via the `--out-file` or `--out-cbor` parameter, you can directly attach it to a transaction as metadata to execute the registration/delegation on chain.
+``` console
+cardano-signer sign --cip36 \
+	--rewards-address "stake1u55c9gha99xz3dnxxeczsr3f4kj23zs4mtpst3szlztengsv62rry" \
+	--vote-public-key test.voting.vkey \
+	--secret-key myStakeKey.skey \
+	--out-cbor myRegistration.cbor
+	
+#Sending example via the SPO-Scripts like:
+01_sendLovelaces.sh wallet wallet min myRegistration.cbor
+```
 
-### REGISTER/DELEGATE TO A SINGLE VOTING-KEY MORE PARAMETERS
+<br>
 
-$ cardano-signer sign --cip36 \
+### Register/Delegate to a single voting-key with more parameters
+
+``` console
+cardano-signer sign --cip36 \
       --rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
       --secret-key ../owner.staking.skey \
       --vote-public-key somevote.vkey \
       --nonce 71948552 \
       --testnet-magic 1 \
       --out-cbor catalyst-delegation.cbor
-
+```
 Output (cbor-hex):
+```
 a219ef64a5018182582057758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0010258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840c839244556db17a2df914c7291c891e5abd1bd580de7786d640da9e27983efe86495cbee900eb685c08e367e778bb0860c6e366b9ec715d8fba824ef55c8aa0f
+```
 
-### REGISTER/DELEGATE TO MULTIPLE VOTING-KEYS WITH VOTINGPOWER 10%,20%,70%
+<br>
 
-$ cardano-signer sign --cip36 \
+### Register/Delegate to multiple voting-keys with votingpower 10%,20%,70%
+
+``` console
+cardano-signer sign --cip36 \
       --rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
       --secret-key ../owner.staking.skey \
       --vote-public-key ../somevote.vkey \
@@ -235,11 +343,14 @@ $ cardano-signer sign --cip36 \
       --nonce 71948552 \
       --testnet-magic 1 \
       --out-cbor catalyst-multidelegation.cbor
-      
+```      
 Output (cbor-hex):
+```
 a219ef64a5018382582099d1d0c4cdc8a4b206066e9606c6c3729678bd7338a8eab9bffdffa39d3df9580a825820c2cd50d8a231fbc1444d65abab4f6bf74178e6de64722558eeef0b73de293a8a1482582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b518460258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840ecce4b2e10146857b9f583ce01b10a26726022963d47fd61d0fbb67b543428fa46315d4e35b2ab73e7e15f620883176422a19e780a751d71ac488053365e6402
-
-$ cardano-signer sign --cip36 \
+```
+Or with two voting-keys and votingpower 1 & 5 with a json-extended output
+``` console
+cardano-signer sign --cip36 \
 	--rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
 	--secret-key "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a" \
 	--vote-public-key ../myvote.voting.pkey --vote-weight 1 \
@@ -247,8 +358,9 @@ $ cardano-signer sign --cip36 \
 	--nonce 123456789 \
 	--testnet-magic 1 \
 	--json-extended
-
-Output (extended-json):
+```
+The output is a more detailed json format, it contains the raw cbor output in the `.output.cbor` key, and the human-readable format in the `.output.json` key:
+``` json
 {
   "workMode": "sign-cip36",
   "votePurpose": "Catalyst",
@@ -284,17 +396,20 @@ Output (extended-json):
 }
 ```
 
-### Signing (CIP-36 mode) - Catalyst Voting-Chain De-Registration
+<br>
+
+### Deregistration from the voting-chain with minimal parameters (Mainnet example)
+
+You can generate a deregistration metadata by using the `--deregister` flag. In that case no vote-key (vote-public-key) or rewards-address is needed as input. Just the secret-key and optionally a nonce and voting-chain-id.
 
 ``` console
-### DEREGISTER FROM THE VOTING-CHAIN WITH MINIMAL PARAMETERS (Mainnet example)
-
-$ cardano-signer sign --cip36 \
+cardano-signer sign --cip36 \
 	--deregister \
 	--secret-key myStakeKey.skey \
 	--json
-
-Output (json): (Nonce automatically calculated from current machine time)
+```
+The output is a human-readable json format, if you redirect it to a file via the `--out-file` parameter, you can directly use it as metadata in a transaction on the chain. Nonce (if not provided) its automatically calculated from current machine time.
+``` json
 {
   "61286": {
     "1": "0x57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0",
@@ -309,51 +424,135 @@ Output (json): (Nonce automatically calculated from current machine time)
 
 <br>
 
-### Verification 
+## Examples - Verification 
 
+### Verify text-data with a given signature and a key-file (.skey)
 ``` console
-### VERIFY HEXDATA or TEXTDATA WITH A SIGNATURE AND A KEY-HEXSTRING
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08"
+```
+The output is plaintext (without any flag) and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
+```
+true
+```
+You can generate a json output via the `--json` flag too.
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
+		      --json
+```
+``` json
+{
+  "result": "true"
+}
+```
+Or a more detailed json output via the `--json-extended` flag.
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
+		      --json-extended
+```
+``` json
+{
+  "workMode": "verify",
+  "result": "true",
+  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+}
+```
+You can also do an optional address check, if the address belongs to the provided public key by adding the address with parameter `--address`:
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
+		      --address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d"
+```
+```
+Error: The address 'addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d' does not belong to the provided public key.
+```
+And if the address matched, cardano-signer will just generate a normal output. If you have set it to `--json-extended` it also includes the address like:
+``` json
+{
+  "workMode": "verify",
+  "result": "true",
+  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "address": "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d",
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+}
+```
 
-$ cardano-signer verify \
+
+<br>
+
+### Verify hex-data with a given signature and a key-hexstring
+``` console
+cardano-signer verify \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
       --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
-
+```
+The output is plaintext and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
+```
 true
-
-$ cardano-signer verify \
+```
+``` console
+cardano-signer verify \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
       --public-key "aaaaaaaaaab3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
-
+```
+```
 false
-
-$ cardano-signer verify \
+```
+``` console
+cardano-signer verify \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --signature "aaaaaaaaaa45dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
+      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27" \
+      --json
+```
+``` json
+{
+  "result": "false"
+}
+```
 
-false
+<br>
 
-### VERIFY HEXDATA WITH A SIGNATURE AND A KEY-FILE
-
-$ cardano-signer verify \
+### Verify hex-data with a signature and a key-file
+``` console
+cardano-signer verify \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
       --public-key owner.staking.vkey
-
+```
+```
 true
-
-$ cardano-signer verify \
+```
+``` console
+cardano-signer verify \
       --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
       --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
       --public-key owner.staking.skey
+```
+You will also get errors if the provided key is not a public-key for example
+```
 Error: The file 'owner.staking.skey' is not a verification/public key json
+```
 
-### VERIFY A FILE WITH A SIGNATURE AND A KEY-FILE
+<br>
 
-$ cardano-signer verify --data-file test.txt --public-key test.vkey --signature "caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09"
-
+### Verify a file with a signature and a key-file
+``` console
+cardano-signer verify --data-file test.txt --public-key test.vkey \
+                      --signature "caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09"
+```
+```
 true
 ```
 
@@ -361,6 +560,9 @@ true
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.10.0**
+  - Added an optional address check for the normal sign/verify functions via the `--address` parameter. If provided, cardano-signer checks that the address belongs to the provided signing/public key.
 
 * **1.9.0**
   #### CIP-36 mode updates:
