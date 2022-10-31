@@ -1,6 +1,6 @@
 {
   "name": "cardano-signer",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "cardano-signer signs a given data(hex/text/file) with a signing key(hex/bech/file) or verify the signature via a public key(hex/bech/file). also it can produce a cip-8 and cip-36 conform payload signing.",
   "main": "cardano-signer.js",
   "scripts": {

@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.9.0"
+const version = "1.10.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -41,6 +41,7 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
 	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"`);
 	console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
 	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
+	console.log(`           [${FgGreen}--address${Reset} "<bech_address>"]				${Dim}optional address check against the signing-key (bech format like 'stake1..., addr1...')${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
         console.log(`   Output: ${FgCyan}"signature_hex + publicKey_hex"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -83,6 +84,7 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
 	console.log(`								${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
 	console.log(`           ${FgGreen}--signature${Reset} "<hex>"					${Dim}signature in hexformat${Reset}`);
 	console.log(`           ${FgGreen}--public-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a public-key-file or a direct public hex/bech-key string${Reset}`);
+	console.log(`           [${FgGreen}--address${Reset} "<bech_address>"]				${Dim}optional address check against the public-key (bech format like 'stake1..., addr1...')${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
         console.log(`   Output: ${FgCyan}"true/false" (exitcode 0/1)${Reset} or ${FgCyan}JSON-Format${Reset}`)
@@ -204,10 +206,10 @@ function getHash(content) { //hashes a given hex-string content with blake2b_256
 }
 */
 
-function getHash(content) { //hashes a given hex-string content with blake2b_256 (digestLength 32, key = null)
-    return blakejs.blake2bHex(Buffer.from(content,'hex'), null, 32)
+function getHash(content, digestLengthBytes) { //hashes a given hex-string content with blake2b_xxx, digestLength is given via the digestLengthBytes parameter, key = null
+    if ( typeof digestLengthBytes === 'undefined' ) { digestLengthBytes = 32; } // if not specified, use the default of 256bits/32bytes -> black2b_256
+    return blakejs.blake2bHex(Buffer.from(content,'hex'), null, digestLengthBytes)
 }
-
 
 
 // MAIN
@@ -319,6 +321,20 @@ async function main() {
 			//generate the public key from the secret key for external verification
 			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
 
+			//check the pubKey against an optionally provided bech32 address via the --address parameter
+                        var sign_addr = args['address'];
+                        if ( typeof sign_addr === 'string' ) { //do the check if the parameter is provided
+	                        sign_addr = trimString(sign_addr.toLowerCase());
+	                        try {
+	                                var sign_addr_hex = CardanoWasm.Address.from_bech32(sign_addr).to_hex();
+	                        } catch (error) { console.error(`Error: The provided address '${sign_addr}' is not a valid bech address`); process.exit(1); }
+	                        //check that the given address belongs to the pubKey
+				var pubKey_hash = getHash(pubKey, 28); //get the blake2b_224 (28bytes digest length)
+	                        if ( ! sign_addr_hex.includes(pubKey_hash) ) { //exit with an error if the address does not contain the pubKey hash
+	                                console.error(`Error: The address '${sign_addr}' does not belong to the provided secret key.`); process.exit(1);
+				}
+			}
+
 			//sign the data
 			try {
 			var signedBytes = prvKey.sign(Buffer.from(sign_data_hex, 'hex')).to_bytes();
@@ -332,6 +348,7 @@ async function main() {
 				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
 				var content = `{ "workMode": "${workMode}", `;
 				if ( sign_data_hex.length <= 2000000 ) { content += `"signDataHex": "${sign_data_hex}", `; } //only include the sign_data_hex if it is less than 2M of chars
+				if ( ! sign_addr_hex == '' ) { content += `"address": "${sign_addr}", `; } //only include the signing address if provided
 				content += `"signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
 			} else { //generate content in text format
 				var content = signature + " " + pubKey;
@@ -786,6 +803,20 @@ async function main() {
 			var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(public_key,'hex'));
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
+			//check the pubKey against an optionally provided bech32 address via the --address parameter
+                        var verify_addr = args['address'];
+                        if ( typeof verify_addr === 'string' ) { //do the check if the parameter is provided
+	                        verify_addr = trimString(verify_addr.toLowerCase());
+	                        try {
+	                                var verify_addr_hex = CardanoWasm.Address.from_bech32(verify_addr).to_hex();
+	                        } catch (error) { console.error(`Error: The provided address '${verify_addr}' is not a valid bech address`); process.exit(1); }
+	                        //check that the given address belongs to the pubKey
+				var public_key_hash = getHash(public_key, 28); //get the blake2b_224 (28bytes digest length)
+	                        if ( ! verify_addr_hex.includes(public_key_hash) ) { //exit with an error if the address does not contain the pubKey hash
+	                                console.error(`Error: The address '${verify_addr}' does not belong to the provided public key.`); process.exit(1);
+				}
+			}
+
 			//load the Ed25519Signature
 			try {
 			var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(signature);
@@ -800,6 +831,7 @@ async function main() {
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var content = `{ "workMode": "${workMode}", "result": "${verified}", `;
 				if ( verify_data_hex.length <= 2000000 ) { content += `"verifyDataHex": "${verify_data_hex}", `; } //only include the verify_data_hex if it is less than 2M of chars
+				if ( ! verify_addr_hex == '' ) { content += `"address": "${verify_addr}", `; } //only include the verification address if provided
 				content += `"signature": "${signature}", "publicKey": "${public_key}" }`;
 			} else { //generate content in text format
 				var content = `${verified}`;
