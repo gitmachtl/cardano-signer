@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.10.0"
+const version = "1.10.1"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -66,7 +66,7 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
 	console.log(`   Params: [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)${Reset}`);
 	console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>]			${Dim}relative weight of each delegated votingpower, default: 100% for a single delegation${Reset}`);
 	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)${Reset}`);
-	console.log(`           ${FgGreen}--rewards-address${Reset} "<bech_address>"			${Dim}rewards stake address (bech format like 'stake1..., stake_test1...')${Reset}`);
+	console.log(`           ${FgGreen}--rewards-address${Reset} "<bech_address>"			${Dim}rewards payout address (bech format like 'addr1..., addr_test1...')${Reset}`);
 	console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
 	console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
 	console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--rewards-address needed${Reset}`);
@@ -473,14 +473,14 @@ async function main() {
 
                 case "sign-cip36":  //SIGN REGISTRATION DATA IN CIP-36 MODE (Catalyst)
 
-			//get rewards stakeaddress in bech format
+			//get rewards stakeaddress in bech format (must be a payment address again starting with catalyst fund10)
 			var rewards_addr = args['rewards-address'];
-		        if ( typeof rewards_addr === 'undefined' || rewards_addr === true ) { console.error(`Error: Missing rewards stake address (bech-format)`); process.exit(1); }
+		        if ( typeof rewards_addr === 'undefined' || rewards_addr === true ) { console.error(`Error: Missing rewards payout address (bech-format)`); process.exit(1); }
 		        rewards_addr = trimString(rewards_addr.toLowerCase());
-			if ( rewards_addr.substring(0,5) != 'stake' ) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a stake address`); process.exit(1); }
+			if ( rewards_addr.substring(0,4) != 'addr' ) { console.error(`Error: The rewards address '${rewards_addr}' is not a bech payment address starting with 'addr...'`); process.exit(1); }
 			try {
 				var rewards_addr_hex = CardanoWasm.Address.from_bech32(rewards_addr).to_hex();
-			} catch (error) { console.error(`Error: The rewards stake address '${rewards_addr}' is not a valid bech address`); process.exit(1); }
+			} catch (error) { console.error(`Error: The rewards address '${rewards_addr}' is not a valid bech payment address`); process.exit(1); }
 
 			//check that the given address belongs to the current network
 			//checks the second char (lower part of the first address byte) if its 1 for mainnet and 0 for testnets
