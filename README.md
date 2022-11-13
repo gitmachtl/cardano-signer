@@ -8,7 +8,7 @@
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 
 ### What can cardano-signer verify?
-* **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
+* **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
 
 <br>
 <br>
@@ -19,7 +19,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.10.0
+cardano-signer 1.10.1
 
 Signing a hex/text-string or a binary-file:
 
@@ -52,7 +52,7 @@ Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
    Params: [--vote-public-key "<path_to_file>|<hex>|<bech>"     public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)
            --vote-weight <unsigned_int>]                        relative weight of each delegated votingpower, default: 100% for a single delegation
            --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)
-           --rewards-address "<bech_address>"                   rewards stake address (bech format like 'stake1..., stake_test1...')
+           --rewards-address "<bech_address>"                   rewards payout address (bech format like 'addr1..., addr_test1...')
            [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
            [--vote-purpose <unsigned_int>]                      optional parameter (unsigned int), default: 0 (catalyst)
            [--deregister]                                       optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--rewards-address needed
@@ -77,7 +77,8 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
 
 ```
 
-![image](https://user-images.githubusercontent.com/47434720/198969929-c48eb34d-b1a9-41d2-b43c-1858a3de9938.png)
+![image](https://user-images.githubusercontent.com/47434720/201514401-f70ccce4-8748-497f-a033-7b1fbc662ef3.png)
+
 
 <br>
 <br>
@@ -274,7 +275,7 @@ Output - Signature & publicKey (hex) :
 ### Register/Delegate to a single voting-key with minimal parameters (Mainnet example)
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "stake1u55c9gha99xz3dnxxeczsr3f4kj23zs4mtpst3szlztengsv62rry" \
+	--rewards-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
 	--vote-public-key test.voting.vkey \
 	--secret-key myStakeKey.skey \
 	--json
@@ -284,22 +285,22 @@ The output in json format (Nonce automatically calculated from current machine t
 {
   "61284": {
     "1": [
-      [ "0xc2cd50d8a231fbc1488d65abab4f6bf74178e6de64722558eeef0b73de293a8a", 1 ]
+      [ "0x423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab769", 1 ]
     ],
-    "2": "0x57758911253aa6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0",
-    "3": "0xe1e382a2fd294c28b7763670280e29ada4a88a15dac305c602f89799a2",
-    "4": 73146002,
+    "2": "0x9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27",
+    "3": "0x617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+    "4": 76763961,
     "5": 0
   },
   "61285": {
-    "1": "0x4a96002...3278ea09"
+    "1": "0x9b3534eeedaea8300bad568be60363b9e2e829ab4249b0ba23f78738a7f952e84afd22a97b744a541c431cf8e9e0bb4a6f7431a2f752fa450b761bc0fa100b0a"
   }
 }
 ```
 If you write out the output to a file via the `--out-file` or `--out-cbor` parameter, you can directly attach it to a transaction as metadata to execute the registration/delegation on chain.
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "stake1u55c9gha99xz3dnxxeczsr3f4kj23zs4mtpst3szlztengsv62rry" \
+	--rewards-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
 	--vote-public-key test.voting.vkey \
 	--secret-key myStakeKey.skey \
 	--out-cbor myRegistration.cbor
@@ -314,7 +315,7 @@ cardano-signer sign --cip36 \
 
 ``` console
 cardano-signer sign --cip36 \
-      --rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
+      --rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
       --secret-key ../owner.staking.skey \
       --vote-public-key somevote.vkey \
       --nonce 71948552 \
@@ -323,7 +324,7 @@ cardano-signer sign --cip36 \
 ```
 Output (cbor-hex):
 ```
-a219ef64a5018182582057758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0010258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840c839244556db17a2df914c7291c891e5abd1bd580de7786d640da9e27983efe86495cbee900eb685c08e367e778bb0860c6e366b9ec715d8fba824ef55c8aa0f
+a219ef64a50181825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab769010258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703583900fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a101584000780582b60c651fa9d2cd3a8cb378561520e3c76ea398f1eb8f17b25084836488d1d75cf323a4b1fa7317099c2c87e411e8403a9f71349042b5723c7fbec807
 ```
 
 <br>
@@ -332,7 +333,7 @@ a219ef64a5018182582057758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e2
 
 ``` console
 cardano-signer sign --cip36 \
-      --rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
+      --rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
       --secret-key ../owner.staking.skey \
       --vote-public-key ../somevote.vkey \
       --vote-weight 10 \
@@ -346,12 +347,12 @@ cardano-signer sign --cip36 \
 ```      
 Output (cbor-hex):
 ```
-a219ef64a5018382582099d1d0c4cdc8a4b206066e9606c6c3729678bd7338a8eab9bffdffa39d3df9580a825820c2cd50d8a231fbc1444d65abab4f6bf74178e6de64722558eeef0b73de293a8a1482582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b518460258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a1015840ecce4b2e10146857b9f583ce01b10a26726022963d47fd61d0fbb67b543428fa46315d4e35b2ab73e7e15f620883176422a19e780a751d71ac488053365e6402
+a219ef64a50183825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab7690a825820c2cd50d8a231fbc1444d65abab4f6bf74178e6de64722558eeef0b73de293a8a1482582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b518460258209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b2703583900fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a0449d908050019ef65a101584086600d0ebbf1e0f200fc9cc148464bcb2e55b893838d0f50b208148cf9d498523dd548423b25897e6e4ce9daa19a74766704a2581cea9441d92c9e25ea901208
 ```
 Or with two voting-keys and votingpower 1 & 5 with a json-extended output
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
+	--rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
 	--secret-key "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a" \
 	--vote-public-key ../myvote.voting.pkey --vote-weight 1 \
 	--vote-public-key vote-test.vkey --vote-weight 5 \
@@ -365,31 +366,31 @@ The output is a more detailed json format, it contains the raw cbor output in th
   "workMode": "sign-cip36",
   "votePurpose": "Catalyst",
   "totalVoteWeight": 6,
-  "signDataHex": "45d05fca1f25e1a01c375dc2c8896e1fe61619852bbef2b26b4ece433c5bdeb7",
-  "signature": "a97affe866b515f3dadb3038b4ccc58bf689005d417300fbf57d3f17eceb553d7354d919adb59a8b6dc30afb6cdda414812c3ffd4dfceebb15e391a7415bde0d",
+  "signDataHex": "7b9240ba5d45b752ed3b86767ddbcefe5da612018c8068af4d3431f3fb28e19b",
+  "signature": "1f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c",
   "secretKey": "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a",
   "publicKey": "86870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e",
   "output": {
-    "cbor": "a219ef64a5018282582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b50182582057758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f00502582086870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e03581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a075bcd15050019ef65a1015840a97affe866b515f3dadb3038b4ccc58bf689005d417300fbf57d3f17eceb553d7354d919adb59a8b6dc30afb6cdda414812c3ffd4dfceebb15e391a7415bde0d",
+    "cbor": "a219ef64a50182825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab7690182582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b50502582086870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e03583900fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a075bcd15050019ef65a10158401f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c",
     "json": {
       "61284": {
         "1": [
           [
-            "0x51f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b5",
+            "0x423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab769",
             1
           ],
           [
-            "0x57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0",
+            "0x51f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b5",
             5
           ]
         ],
         "2": "0x86870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e",
-        "3": "0xe0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f",
+        "3": "0x00fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f",
         "4": 123456789,
         "5": 0
       },
       "61285": {
-        "1": "0xa97affe866b515f3dadb3038b4ccc58bf689005d417300fbf57d3f17eceb553d7354d919adb59a8b6dc30afb6cdda414812c3ffd4dfceebb15e391a7415bde0d"
+        "1": "0x1f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c"
       }
     }
   }
@@ -560,6 +561,10 @@ true
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.10.1**
+  #### CIP-36 updates:
+     - Starting with Fund10, the rewards address for the voting rewards must be a regular payment address (enterprise or base address), not a stake address like before.
 
 * **1.10.0**
   - Added an optional address check for the normal sign/verify functions via the `--address` parameter. If provided, cardano-signer checks that the address belongs to the provided signing/public key.
