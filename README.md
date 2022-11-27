@@ -3,12 +3,13 @@
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
 ### What can cardano-signer sign?
-* **Sign** any hexdata, textdata or binaryfile with a provided normal or extended secret key. The key can be provided in hex, bech or file format. The signing output is a signature in hex- or json-format, also the public key of the provided secret key for verification.
+* **Sign** any hexdata, textdata or binaryfile with a provided normal or extended secret key. The key can be provided in hex, bech or file format. The signing output is a signature in hex- or json-format, also the public key of the provided secret key for verification. With the enabled `--bech` flag the generated signature and public key will be return in a **jcli** compatible bech format. **Cardano-signer can be used instead of jcli for signing**.
 * Sign payloads in **CIP-8** mode. The signing output is a signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 
 ### What can cardano-signer verify?
 * **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
+* The signature can be provided in hex format or also in bech encoded `ed25519_sig` format. **Cardano-signer can be used instead of jcli for verification**.
 
 <br>
 <br>
@@ -19,7 +20,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.10.1
+cardano-signer 1.11.0
 
 Signing a hex/text-string or a binary-file:
 
@@ -29,8 +30,9 @@ Signing a hex/text-string or a binary-file:
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            [--address "<bech_address>"]                         optional address check against the signing-key (bech format like 'stake1..., addr1...')
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--bech]                                             optional flag to generate signature & publicKey in jcli compatible bech-format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
-   Output: "signature_hex + publicKey_hex" or JSON-Format
+   Output: "signature + publicKey" or JSON-Format               default: hex-format
 
 
 Signing a payload in CIP-8 mode:
@@ -68,7 +70,7 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
    Syntax: cardano-signer verify
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
                                                                 data/payload/file to verify in hex-, text- or binary-file-format
-           --signature "<hex>"                                  signature in hexformat
+           --signature "<hex>|<bech>"                           signature in hex- or bech-format
            --public-key "<path_to_file>|<hex>|<bech>"           path to a public-key-file or a direct public hex/bech-key string
            [--address "<bech_address>"]                         optional address check against the public-key (bech format like 'stake1..., addr1...')
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
@@ -561,6 +563,12 @@ true
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.11.0**
+  #### General:
+  	- Added an optional flag `--bech` (also `--jcli` works), to output the signature and public key in jcli compatible bech format with prefixes `ed25519_sig` and `ed25519_pk`. This is available in the normal signing mode.
+	- The verify function now also accepts bech encoded signatures `ed25519_sig` in addition to hex strings.
+	- With this update the sign/verify functions in **cardano-signer can substitute jcli** for sign/verify.
 
 * **1.10.1**
   #### CIP-36 updates:
