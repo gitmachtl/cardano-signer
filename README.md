@@ -79,8 +79,7 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
 
 ```
 
-![image](https://user-images.githubusercontent.com/47434720/201514401-f70ccce4-8748-497f-a033-7b1fbc662ef3.png)
-
+![image](https://user-images.githubusercontent.com/47434720/204143622-773e4fe9-d6f4-479b-bee3-1575f8754ae8.png)
 
 <br>
 <br>
