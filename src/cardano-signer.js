@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.10.1"
+const version = "1.11.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -14,9 +14,9 @@ const blakejs = require('blakejs'); //alternative blake2 implementation
 const parse_options = {
 	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor'],
 	number: ['nonce', 'vote-weight', 'vote-purpose'],
-	boolean: ['json', 'json-extended', 'cip8', 'cip36', 'deregister'],
+	boolean: ['json', 'json-extended', 'cip8', 'cip36', 'deregister', 'bech'],
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text' }
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech' }
 };
 const args = require('minimist')(process.argv.slice(2),parse_options);
 
@@ -43,8 +43,9 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
 	console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 	console.log(`           [${FgGreen}--address${Reset} "<bech_address>"]				${Dim}optional address check against the signing-key (bech format like 'stake1..., addr1...')${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+	console.log(`           [${FgGreen}--bech${Reset}${Reset}]						${Dim}optional flag to generate signature & publicKey in jcli compatible bech-format${Reset}`);
 	console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
-        console.log(`   Output: ${FgCyan}"signature_hex + publicKey_hex"${Reset} or ${FgCyan}JSON-Format${Reset}`);
+        console.log(`   Output: ${FgCyan}"signature + publicKey"${Reset} or ${FgCyan}JSON-Format${Reset}		${Dim}default: hex-format${Reset}`);
         console.log(``)
         console.log(``)
         console.log(`${Bright}${Underscore}Signing a payload in CIP-8 mode:${Reset}`)
@@ -82,7 +83,7 @@ FgBlack = "\x1b[30m"; FgRed = "\x1b[31m"; FgGreen = "\x1b[32m"; FgYellow = "\x1b
         console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify${Reset}`);
 	console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
 	console.log(`								${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
-	console.log(`           ${FgGreen}--signature${Reset} "<hex>"					${Dim}signature in hexformat${Reset}`);
+	console.log(`           ${FgGreen}--signature${Reset} "<hex>|<bech>"				${Dim}signature in hex- or bech-format${Reset}`);
 	console.log(`           ${FgGreen}--public-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a public-key-file or a direct public hex/bech-key string${Reset}`);
 	console.log(`           [${FgGreen}--address${Reset} "<bech_address>"]				${Dim}optional address check against the public-key (bech format like 'stake1..., addr1...')${Reset}`);
 	console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
@@ -340,6 +341,15 @@ async function main() {
 			var signedBytes = prvKey.sign(Buffer.from(sign_data_hex, 'hex')).to_bytes();
 			var signature = Buffer.from(signedBytes).toString('hex');
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+
+			//if jcli-flag is set, convert the signature and publickey into the jcli bech-format
+			//with prefix ed25519_sig and ed25519_pk
+			if ( args['jcli'] === true ) { //convert signature and publickey in bech format
+				try {
+				signature = bech32.encode("ed25519_sig", bech32.toWords(Buffer.from(signature, "hex")), 128); //encode in bech32 with a raised limit to 128 words (signature is longer than the default limit of 90 words)
+				pubKey = bech32.encode("ed25519_pk", bech32.toWords(Buffer.from(pubKey, "hex"))); //encode in bech32
+				} catch (error) { console.error(`${error}\nCouldn't encode signature/pubKey into bech string.`); process.exit(1); }
+			}
 
 			//compose the content for the output: signature data + public key
 			if ( args['json'] === true ) { //generate content in json format
@@ -788,8 +798,12 @@ async function main() {
 		        if ( typeof signature === 'undefined' || signature === true ) { console.error(`Error: Missing signature`); showUsage(); }
 		        signature = trimString(signature.toLowerCase());
 
-			//check that the given signature is a hex string
-			if ( ! regExpHex.test(signature) ) { console.error(`Error: Signature is not a valid hex string`); process.exit(1); }
+			//check if that the given signature is a hex string, if not check if its a bech encoded signature
+			if ( ! regExpHex.test(signature) ) {
+				try {
+					signature = Buffer.from(bech32.fromWords(bech32.decode(signature,128).words)).toString('hex');
+				} catch (error) {console.error(`Error: Signature is not a valid hex string or a valid bech encoded signature`); process.exit(1);}
+			}
 
 			//get public key -> store it in public_key
 			var key_file_hex = args['public-key'];
