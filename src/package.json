@@ -1,7 +1,7 @@
 {
   "name": "cardano-signer",
-  "version": "1.11.0",
-  "description": "cardano-signer signs a given data(hex/text/file) with a signing key(hex/bech/file) or verify the signature via a public key(hex/bech/file). also it can produce a cip-8 and cip-36 conform payload signing.",
+  "version": "1.12.0",
+  "description": "cardano-signer signs a given data(hex/text/file) with a signing key(hex/bech/file) or verify the signature via a public key(hex/bech/file). it can also produce a cip-8/cip-30 and cip-36 conform payload signing/verification.",
   "main": "cardano-signer.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,9 +10,12 @@
   "license": "MIT",
   "dependencies": {
     "@emurgo/cardano-serialization-lib-nodejs": "^11.1.0",
+    "base64url": "^3.0.1",
     "bech32": "^2.0.0",
+    "bip39": "^3.0.2",
     "blakejs": "^1.2.1",
     "cbor": "^8.1.0",
+    "fnv32": "^0.0.1",
     "minimist": "^1.2.6"
   },
   "repository": {
