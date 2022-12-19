@@ -1,4 +1,4 @@
-# Tool to sign data with a Cardano-Secret-Key // verify data with a Cardano-Public-Key // generate CIP-8, CIP-30 & CIP-36 data
+# Tool to sign & verify data with a Cardano-Secret/Public-Key // sign & verify CIP-8, CIP-30 & CIP-36 data
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -579,9 +579,10 @@ cardano-signer verify --cip8 \
 ```
 ``` json
 {
-  "result": "false"
+  "result": "true"
 }
 ```
+If the address does not belong to the publicKey in the COSE_Key, there will be an error.
 ``` console
 cardano-signer verify --cip8 \
 	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
