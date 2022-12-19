@@ -1,26 +1,36 @@
-# Tool to sign data with a Cardano-Secret-Key // verify data with a Cardano-Public-Key // generate CIP-8 & CIP-36 data
+# Tool to sign data with a Cardano-Secret-Key // verify data with a Cardano-Public-Key // generate CIP-8, CIP-30 & CIP-36 data
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
-### What can cardano-signer sign?
-* **Sign** any hexdata, textdata or binaryfile with a provided normal or extended secret key. The key can be provided in hex, bech or file format. The signing output is a signature in hex- or json-format, also the public key of the provided secret key for verification. With the enabled `--bech` flag the generated signature and public key will be return in a **jcli** compatible bech format. **Cardano-signer can be used instead of jcli for signing**.
-* Sign payloads in **CIP-8** mode. The signing output is a signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
+&nbsp;<p>
+
+### What can cardano-signer sign/generate?
+* **Sign** any hexdata, textdata or binaryfile with a provided normal or extended secret key. The key can be provided in hex, bech or file format. The signing output is a signature in hex- or json-format, also the public key of the provided secret key for verification. With the enabled `--jcli` flag the generated signature and public key will be return in a **jcli** compatible bech format. **Cardano-signer can be used instead of jcli for signing**.
+* Sign payloads in **CIP-8 / CIP-30** mode, hashed or not hashed, with or without a payload in the output. The signing output is a COSE_Sign1 signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
+* A given address will automatically be checked against the used publicKey
 
 ### What can cardano-signer verify?
 * **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
 * The signature can be provided in hex format or also in bech encoded `ed25519_sig` format. **Cardano-signer can be used instead of jcli for verification**.
+* Verify **CIP-8 / CIP-30** COSE_Sign1/COSE_Key data. With hashed or non-hashed payloads. There is also a detailed check on the COSE_Sign1 and COSE_Key data structure included. Verification can be done on the COSE_Sign1 + COSE_Key, or COSE_Sign1 + COSE_Key + payload and/or address.
 
-<br>
-<br>
+&nbsp;<p>
 
-## Usage
+## Examples
+* **[Default mode](#default-mode)**: Sign and verify data with ed25519(cardano) keys
+* **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
+* **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
+
+&nbsp;<p>
+
+## Full syntax
 
 ``` console
 
 $ ./cardano-signer help
 
-cardano-signer 1.11.0
+cardano-signer 1.12.0
 
 Signing a hex/text-string or a binary-file:
 
@@ -28,24 +38,27 @@ Signing a hex/text-string or a binary-file:
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
-           [--address "<bech_address>"]                         optional address check against the signing-key (bech format like 'stake1..., addr1...')
+           [--address "<path_to_file>|<hex>|<bech>"]            optional address check against the signing-key (address-file or a direct bech/hex format)
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
-           [--bech]                                             optional flag to generate signature & publicKey in jcli compatible bech-format
+           [--jcli | --bech]                                    optional flag to generate signature & publicKey in jcli compatible bech-format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "signature + publicKey" or JSON-Format               default: hex-format
 
 
-Signing a payload in CIP-8 mode:
+Signing a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
 
    Syntax: cardano-signer sign --cip8
+           cardano-signer sign --cip30
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
-           --address "<bech_address>"                           signing address (bech format like 'stake1..., stake_test1...')
+           --address "<path_to_file>|<hex>|<bech>"              path to an address-file or a direct bech/hex format 'stake1..., stake_test1..., addr1...'
+           [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
+           [--nopayload]                                        optional flag to exclude the payload from the COSE_Sign1 signature, default: included
            [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
-   Output: "signature_hex + publicKey_hex" or JSON-Format
+   Output: "COSE_Sign1 + COSE_Key" or JSON-Format
 
 
 Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
@@ -54,7 +67,7 @@ Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
    Params: [--vote-public-key "<path_to_file>|<hex>|<bech>"     public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)
            --vote-weight <unsigned_int>]                        relative weight of each delegated votingpower, default: 100% for a single delegation
            --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)
-           --rewards-address "<bech_address>"                   rewards payout address (bech format like 'addr1..., addr_test1...')
+           --rewards-address "<path_to_file>|<hex>|<bech>"      rewards payout address (address-file or a direct bech/hex format 'addr1..., addr_test1...')
            [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
            [--vote-purpose <unsigned_int>]                      optional parameter (unsigned int), default: 0 (catalyst)
            [--deregister]                                       optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--rewards-address needed
@@ -72,19 +85,36 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
                                                                 data/payload/file to verify in hex-, text- or binary-file-format
            --signature "<hex>|<bech>"                           signature in hex- or bech-format
            --public-key "<path_to_file>|<hex>|<bech>"           path to a public-key-file or a direct public hex/bech-key string
-           [--address "<bech_address>"]                         optional address check against the public-key (bech format like 'stake1..., addr1...')
+           [--address "<path_to_file>|<hex>|<bech>"]            optional address check against the public-key (address-file or a direct bech/hex format)
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+   Output: "true/false" (exitcode 0/1) or JSON-Format
+
+
+Verifying a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
+
+   Syntax: cardano-signer verify --cip8
+           cardano-signer verify --cip30
+   Params: --cose-sign1 "<hex>"                                 COSE_Sign1 signature in cbor-hex-format
+           --cose-key "<hex>"                                   COSE_Key containing the public-key in cbor-hex-format
+           [--data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"]
+                                                                optional data/payload/file if not present in the COSE_Sign1 signature
+           [--address "<path_to_file>|<hex>|<bech>"]            optional signing-address to do the verification with
+           [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 ```
 
-![image](https://user-images.githubusercontent.com/47434720/204143622-773e4fe9-d6f4-479b-bee3-1575f8754ae8.png)
-
 <br>
 <br>
 
-## Examples - Signing data in normal mode
+# Default mode
+
+## *Signing - Generate a signature*
+
+![image](https://user-images.githubusercontent.com/47434720/208511485-34ad734d-3c0b-42f9-996a-887966cbd12d.png)
 
 ### Sign text-data with a KEY-FILE (.skey)
 ``` console
@@ -125,7 +155,7 @@ cardano-signer sign --data "this is a test payload :-)" \
 You can also do an optional address check, if the address belongs to the key.
 ``` console
 cardano-signer sign --data "this is a test payload :-)" \
-                    --secret-key test.skey \
+                    --secret-key dummy.skey \
 		    --json-extended \
 		    --address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d"
 ```
@@ -133,15 +163,17 @@ If the address is wrong you will get an error like:
 ```
 Error: The address 'addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d' does not belong to the provided secret key.
 ```
-If the address is correct, cardano-signer outputs like normal. In case of the detailed json output it also includes the address.
+If the address is correct, cardano-signer outputs like normal. In case of the **detailed json output** it also **includes the address infos**.
 ``` json
 {
   "workMode": "sign",
   "signDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
-  "address": "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d",
-  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
-  "secretKey": "e8ddb1cfc09e163915e6c28fcb5fbb563bfef57201857e15288b67abbd91e4441e5fa179a8f90da1684ba5aa310da521651d2ce20443f149f8ca9e333a96dabc",
-  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+  "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+  "addressType": "payment enterprise",
+  "addressNetwork": "mainnet",
+  "signature": "c60aae4701b49d0b5276b703e72b1a310d6df45b6671bcc08eb06ae9640584577d5d7bb14429bbc855a6382a40412a27f8d5c794220e26cea7404f1cfb0e5d0b",
+  "secretKey": "16275bd6647f94a53e9fe1c71439a258a03c13cadf32935ed5388972ebd7e53f",
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
 }
 ```
 
@@ -218,40 +250,225 @@ caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bca
 
 <br>
 
-## Examples - Signing data in CIP-8 mode
+## *Verification*
+
+![image](https://user-images.githubusercontent.com/47434720/208521774-acc55a42-f37d-46cd-a424-eb7dcc01f149.png)
+
+### Verify text-data with a given signature and a key-file (.skey)
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08"
+```
+The output is plaintext (without any flag) and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
+```
+true
+```
+You can generate a json output via the `--json` flag too.
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
+		      --json
+```
+``` json
+{
+  "result": "true"
+}
+```
+Or a more detailed json output via the `--json-extended` flag.
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key test.vkey \
+		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
+		      --json-extended
+```
+``` json
+{
+  "workMode": "verify",
+  "result": "true",
+  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
+  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+}
+```
+You can also do an optional address check, if the address belongs to the provided public key by adding the address with parameter `--address`:
+``` console
+cardano-signer verify --data "this is a test payload :-)" \
+		      --public-key dummy.vkey \
+		      --signature "c60aae4701b49d0b5276b703e72b1a310d6df45b6671bcc08eb06ae9640584577d5d7bb14429bbc855a6382a40412a27f8d5c794220e26cea7404f1cfb0e5d0b" \
+		      --address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d"
+```
+```
+Error: The address 'addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d' does not belong to the provided public key.
+```
+And if the address matched, cardano-signer will just generate a normal output. If you have set it to `--json-extended` it also includes the address infos like:
+``` json
+{
+  "workMode": "verify",
+  "result": "true",
+  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
+  "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+  "addressType": "payment enterprise",
+  "addressNetwork": "mainnet",
+  "signature": "c60aae4701b49d0b5276b703e72b1a310d6df45b6671bcc08eb06ae9640584577d5d7bb14429bbc855a6382a40412a27f8d5c794220e26cea7404f1cfb0e5d0b",
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+}
+```
+
+
+<br>
+
+### Verify hex-data with a given signature and a key-hexstring
+``` console
+cardano-signer verify \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
+      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
+```
+The output is plaintext and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
+```
+true
+```
+``` console
+cardano-signer verify \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
+      --public-key "aaaaaaaaaab3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
+```
+```
+false
+```
+``` console
+cardano-signer verify \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --signature "aaaaaaaaaa45dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
+      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27" \
+      --json
+```
+``` json
+{
+  "result": "false"
+}
+```
+
+<br>
+
+### Verify hex-data with a signature and a key-file
+``` console
+cardano-signer verify \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
+      --public-key owner.staking.vkey
+```
+```
+true
+```
+``` console
+cardano-signer verify \
+      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
+      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
+      --public-key owner.staking.skey
+```
+You will also get errors if the provided key is not a public-key for example
+```
+Error: The file 'owner.staking.skey' is not a verification/public key json
+```
+
+<br>
+
+### Verify a file with a signature and a key-file
+``` console
+cardano-signer verify --data-file test.txt --public-key test.vkey \
+                      --signature "caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09"
+```
+```
+true
+```
+
+<p>&nbsp;<p>&nbsp;
+
+# CIP-8 / CIP-30 mode
+
+## *Signing - Generate the COSE_Sign1 & COSE_Key*
+
+![image](https://user-images.githubusercontent.com/47434720/208512729-e0119b98-5d26-458f-8575-ecbb3d64241c.png)
 
 ### Sign some text-data payload
 
 ``` console
 cardano-signer sign --cip8 \
-      --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
-      --data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
-      --secret-key myStakeKey.skey \
-      --testnet-magic 1
+	--data "Hello world" \
+	--secret-key dummy.skey \
+	--address dummy.addr
 ```
-Output - Signature & publicKey (hex) :
+Output - **COSE_Sign1 Signature & COSE_Key publicKey** (hex):
 ```
-5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
+84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9
 ```
-Or with the more detailed json output:
+Or with the **more detailed** json output which includes many useful and extra information like the `signedMessage` string:
 ``` console
 cardano-signer sign --cip8 \
-	--address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
-	--data '{"choice":"Yes","comment":"","network":"preview","proposal":"2038c417d112e005ef61c95d710ee62184a6c177d18b2da891f97cefae4f8535","protocol":"SundaeSwap","title":"Test Proposal - Tampered","version":"1","votedAt":"3137227","voter":"stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg"}' \
-	--secret-key myStakeKey.skey \
-	--testnet-magic 1 \
+	--data "Hello world" \
+	--secret-key dummy.skey \
+	--address dummy.addr \
 	--json-extended
 ```
 ``` json
 {
   "workMode": "sign-cip8",
-  "addressHex": "e0171983a1178a55b02afacfd6ad6b516da375469fd7dbcf54a2f95823",
-  "inputDataHex": "7b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d",
-  "signDataHex": "846a5369676e617475726531582aa201276761646472657373581de0171983a1178a55b02afacfd6ad6b516da375469fd7dbcf54a2f95823405901277b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d",
-  "signature": "5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506",
-  "secretKey": "e8ddb1cfc09e163915e6c28fcb5fbb563bfef57201857e15288b67abbd91e4441e5fa179a8f90da1684ba5aa310da521651d2ce20443f149f8ca9e333a96dabc",
-  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
+  "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+  "addressType": "payment enterprise",
+  "addressNetwork": "mainnet",
+  "inputDataHex": "48656c6c6f20776f726c64",
+  "isHashed": "false",
+  "signDataHex": "846a5369676e617475726531582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8404b48656c6c6f20776f726c64",
+  "signature": "fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001",
+  "secretKey": "16275bd6647f94a53e9fe1c71439a258a03c13cadf32935ed5388972ebd7e53f",
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9",
+  "output": {
+    "signedMessage": "cms_hFgqogEnZ2FkZHJlc3NYHWF4Y7XEO98KBmCKvILwVzpUlxT_aRZgdNzd45PYoWZoYXNoZWT0S0hlbGxvIHdvcmxkWED8WBVfDO4FvADnKZrx3x8VmsgqRqBVeGsllleTTv80buyBNJ1GeM6rx58hPGaivb_U6l2evcYwvuWsnM51z8ABZWrr1w",
+    "COSE_Sign1_hex": "84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001",
+    "COSE_Key_hex": "a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+  }
 }
+```
+If you wanna **hash the payload**, add the `--hashed` flag:
+``` console
+cardano-signer sign --cip8 \
+	--data "Hello world" \
+	--secret-key dummy.skey \
+	--address dummy.addr \
+	--hashed \
+	--json-extended
+```
+If you wanna **exclude the payload** itself from the COSE_Sign1 output, add the `--nopayload` flag:
+``` console
+cardano-signer sign --cip8 \
+	--data "Hello world" \
+	--secret-key dummy.skey \
+	--address dummy.addr \
+	--nopayload \
+	--json-extended
+```
+This will not include the payload in the COSE_Sign1 signature, useful if all involved entities know the payload.
+```
+COSE_Sign1 cbor:
+84                                     # array(4)
+   58 2a                               #   bytes(42)
+      a201276761646472657373581d617863 #     "\xa2\x01\'gaddressX\x1daxc"
+      b5c43bdf0a06608abc82f0573a549714 #     "\xb5\xc4;\xdf\n\x06`\x8a\xbc\x82\xf0W:T\x97\x14"
+      ff69166074dcdde393d8             #     "\xffi\x16`t\xdc\xdd\xe3\x93\xd8"
+   a1                                  #   map(1)
+      66                               #     text(6)
+         686173686564                  #       "hashed"
+      f4                               #     false, simple(20)
+   f6                                  #   null, simple(22)
+   58 40                               #   bytes(64)
+      fc58155f0cee05bc00e7299af1df1f15 #     "\xfcX\x15_\x0c\xee\x05\xbc\x00\xe7)\x9a\xf1\xdf\x1f\x15"
+      9ac82a46a055786b259657934eff346e #     "\x9a\xc8*F\xa0Uxk%\x96W\x93N\xff4n"
+      ec81349d4678ceabc79f213c66a2bdbf #     "\xec\x814\x9dFx\xce\xab\xc7\x9f!<f\xa2\xbd\xbf"
+      d4ea5d9ebdc630bee5ac9cce75cfc001 #     "\xd4\xea]\x9e\xbd\xc60\xbe\xe5\xac\x9c\xceu\xcf\xc0\x01"
 ```
 
 <br>
@@ -259,19 +476,131 @@ cardano-signer sign --cip8 \
 ### Sign hex-data payload
 ``` console
 cardano-signer sign --cip8 \
-      --address "stake_test1uqt3nqapz799tvp2lt8adttt29k6xa2xnltahn655tu4sgc6asaqg" \
-      --data-hex "7b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d" \
-      --secret-key myStakeKey.skey \
-      --testnet-magic 1
+	--address "stake_test1urqntq4wexjylnrdnp97qq79qkxxvrsa9lcnwr7ckjd6w0cr04y4p" \
+	--data-hex "7b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d" \
+	--secret-key staking.skey \
+	--testnet-magic 1 \
+	--json
 ```
-Output - Signature & publicKey (hex) :
-```
-5b2e7ac3fbe3cec1540f98fcc29c1ab63778e14a653a2328b2e56af6fd2a714540708e5f3e19670b9b867151c7dfb75061c6b94508d88f43ad3b3893ca213506 57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0
+Output - **COSE_Sign1 Signature & COSE_Key publicKey** (hex):
+``` json
+{
+  "COSE_Sign1_hex": "84582aa201276761646472657373581de0c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73fa166686173686564f45901277b2263686f696365223a22596573222c22636f6d6d656e74223a22222c226e6574776f726b223a2270726576696577222c2270726f706f73616c223a2232303338633431376431313265303035656636316339356437313065653632313834613663313737643138623264613839316639376365666165346638353335222c2270726f746f636f6c223a2253756e64616553776170222c227469746c65223a22546573742050726f706f73616c202d2054616d7065726564222c2276657273696f6e223a2231222c22766f7465644174223a2233313337323237222c22766f746572223a227374616b655f7465737431757174336e7161707a373939747670326c7438616474747432396b36786132786e6c7461686e363535747534736763366173617167227d5840c2ffc4650e21376297f42040028382406bf888c09f35a74324e80a531cc6359a6d2acc9a6e4c58c664463a25889de37d2f54422ae20a259db6fed37b86d05202",
+  "COSE_Key_hex": "a40101032720062158209be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
+}
 ```
 
-<br>
+## *Verification*
 
-## Examples - Signing in CIP-36 mode (Catalyst Voting Registration / VotingPower Delegation)
+![image](https://user-images.githubusercontent.com/47434720/208522843-296257c8-fced-4573-8592-85f10b0f4762.png)
+
+### Verify COSE_Sign1 & COSE_Key data
+
+Lets use the signed data from the first signing example for the verification.
+```
+COSE_Sign1: 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001
+COSE_Key: a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9
+```
+To **verify** the COSE data with a **detailed output** run:
+``` console
+cardano-signer verify --cip8 \
+	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
+	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
+	--json-extended
+```
+This outputs the detailed json:
+``` json
+{
+  "workMode": "verify-cip8",
+  "result": "true",
+  "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+  "addressType": "payment enterprise",
+  "addressNetwork": "mainnet",
+  "payloadDataHex": "48656c6c6f20776f726c64",
+  "isHashed": "false",
+  "verifyDataHex": "846a5369676e617475726531582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8404b48656c6c6f20776f726c64",
+  "signature": "fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001",
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+}
+```
+You see that the verification was successful, the used signing-address, and payload was not hashed.
+
+### Verify COSE_Sign1 & COSE_Key data with a given payload
+
+If you wanna verify the COSE data against a given payload, simply add it as a --data parameter:
+``` console
+cardano-signer verify --cip8 \
+	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
+	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
+	--data 'Not hello world' \
+	--json
+```
+``` json
+{
+  "result": "false"
+}
+```
+
+### Verify a 'payloadless' COSE_Sign1 & COSE_Key by providing the needed payload data
+
+If you have a COSE_Sign1 without an included payload (like the signing example further above), you need to provide the payload data to do a successful verification. In the example the payload was 'Hello world' but was not included in the COSE_Sign1, so we add it.
+``` console
+cardano-signer verify --cip30 \
+	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f4f65840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
+	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
+	--data 'Hello world' \
+	--json-extended
+```
+``` json
+{
+  "workMode": "verify-cip30",
+  "result": "true",
+  "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+  "addressType": "payment enterprise",
+  "addressNetwork": "mainnet",
+  "payloadDataHex": "48656c6c6f20776f726c64",
+  "isHashed": "false",
+  "verifyDataHex": "846a5369676e617475726531582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8404b48656c6c6f20776f726c64",
+  "signature": "fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001",
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+}
+```
+The verification is successful.
+
+### Verify the address in the COSE_Sign1 & COSE_Key data
+
+To verify the address in the COSE data simply add the address via the `--address` parameter:
+``` console
+cardano-signer verify --cip8 \
+	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
+	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
+	--address dummy.addr
+	--json
+```
+``` json
+{
+  "result": "false"
+}
+```
+``` console
+cardano-signer verify --cip8 \
+	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
+	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
+	--address addr_test1vpfwv0ezc5g8a4mkku8hhy3y3vp92t7s3ul8g778g5yegsgalc6gc
+	--json
+```
+Results in an error:
+```
+Error: The given payment enterprise address 'addr_test1vpfwv0ezc5g8a4mkku8hhy3y3vp92t7s3ul8g778g5yegsgalc6gc' does not belong to the public key in the COSE_Key.
+```
+
+<p>&nbsp;<p>&nbsp;
+
+# CIP-36 mode (Catalyst Voting Registration / VotingPower Delegation)
+
+## *Signing - Generate the registration metadata*
+
+![image](https://user-images.githubusercontent.com/47434720/208521648-d6d90d24-a2f8-4abd-ad32-009d1783cc6e.png)
 
 ### Register/Delegate to a single voting-key with minimal parameters (Mainnet example)
 ``` console
@@ -361,27 +690,30 @@ cardano-signer sign --cip36 \
 	--testnet-magic 1 \
 	--json-extended
 ```
-The output is a more detailed json format, it contains the raw cbor output in the `.output.cbor` key, and the human-readable format in the `.output.json` key:
+The output is a **way more detailed json** format, it contains the raw cbor output in the `.output.cbor` key, and the human-readable format in the `.output.json` key:
 ``` json
 {
   "workMode": "sign-cip36",
-  "votePurpose": "Catalyst",
+  "votePurpose": "Catalyst (0)",
   "totalVoteWeight": 6,
-  "signDataHex": "7b9240ba5d45b752ed3b86767ddbcefe5da612018c8068af4d3431f3fb28e19b",
-  "signature": "1f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c",
+  "rewardsAddressHex": "00fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f",
+  "rewardsAddressType": "payment base",
+  "rewardsAddressNetwork": "testnet",
+  "signDataHex": "1ebe4301d8db0af3c65682e8c9c70c0a22ecc474824d4688b6c24936b9d69fd4",
+  "signature": "c5e380e1282b54d6e2f9004e73c533c5e1b135b81076859ff606a16dde410f8375164fc4c4d6c11e43633228687580b5bab02b3181908715f74efdefd2e63902",
   "secretKey": "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a",
   "publicKey": "86870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e",
   "output": {
-    "cbor": "a219ef64a50182825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab7690182582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b50502582086870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e03583900fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a075bcd15050019ef65a10158401f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c",
+    "cbor": "a219ef64a5018282582051f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b501825820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb90502582086870efc99c453a873a16492ce87738ec79a0ebd064379a62e2c9cf4e119219e03583900fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f041a075bcd15050019ef65a1015840c5e380e1282b54d6e2f9004e73c533c5e1b135b81076859ff606a16dde410f8375164fc4c4d6c11e43633228687580b5bab02b3181908715f74efdefd2e63902",
     "json": {
       "61284": {
         "1": [
           [
-            "0x423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047ab769",
+            "0x51f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b5",
             1
           ],
           [
-            "0x51f117d26e29aea7db3d1f2f874ab5f585f619a95aed6d71d31a7404cb6557b5",
+            "0x755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9",
             5
           ]
         ],
@@ -391,7 +723,7 @@ The output is a more detailed json format, it contains the raw cbor output in th
         "5": 0
       },
       "61285": {
-        "1": "0x1f49a1074fbe01ef4f5f457a806c0595a6b232845c88ad31889d65cbd8d5160fc950cb09fb7043ff47005822920cc16fb966c6a73e7eab2876b20b48fcb38b0c"
+        "1": "0xc5e380e1282b54d6e2f9004e73c533c5e1b135b81076859ff606a16dde410f8375164fc4c4d6c11e43633228687580b5bab02b3181908715f74efdefd2e63902"
       }
     }
   }
@@ -426,142 +758,26 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 <br>
 
-## Examples - Verification 
-
-### Verify text-data with a given signature and a key-file (.skey)
-``` console
-cardano-signer verify --data "this is a test payload :-)" \
-		      --public-key test.vkey \
-		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08"
-```
-The output is plaintext (without any flag) and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
-```
-true
-```
-You can generate a json output via the `--json` flag too.
-``` console
-cardano-signer verify --data "this is a test payload :-)" \
-		      --public-key test.vkey \
-		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
-		      --json
-```
-``` json
-{
-  "result": "true"
-}
-```
-Or a more detailed json output via the `--json-extended` flag.
-``` console
-cardano-signer verify --data "this is a test payload :-)" \
-		      --public-key test.vkey \
-		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
-		      --json-extended
-```
-``` json
-{
-  "workMode": "verify",
-  "result": "true",
-  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
-  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
-  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
-}
-```
-You can also do an optional address check, if the address belongs to the provided public key by adding the address with parameter `--address`:
-``` console
-cardano-signer verify --data "this is a test payload :-)" \
-		      --public-key test.vkey \
-		      --signature "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08" \
-		      --address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d"
-```
-```
-Error: The address 'addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d' does not belong to the provided public key.
-```
-And if the address matched, cardano-signer will just generate a normal output. If you have set it to `--json-extended` it also includes the address like:
-``` json
-{
-  "workMode": "verify",
-  "result": "true",
-  "verifyDataHex": "7468697320697320612074657374207061796c6f6164203a2d29",
-  "address": "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d",
-  "signature": "8a5fd6602094407b7e5923aa0f2694f8cb5cf39f317a61059fdc572e24fc1c7660d23c04d46355aed78b5ec35ae8cad1433e7367bb874390dfe46ed155727a08",
-  "publicKey": "57758911253f6b31df2a87c10eb08a2c9b8450768cb8dd0d378d93f7c2e220f0"
-}
-```
-
-
-<br>
-
-### Verify hex-data with a given signature and a key-hexstring
-``` console
-cardano-signer verify \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
-```
-The output is plaintext and will be simply `true` if there is a match, or `false` if there is a mismatch. Cardano-signer also exits with an exitcode=0 (no error) in case of a match, or with exitcode=1 in case any error or mismatch occured.
-```
-true
-```
-``` console
-cardano-signer verify \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key "aaaaaaaaaab3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27"
-```
-```
-false
-```
-``` console
-cardano-signer verify \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --signature "aaaaaaaaaa45dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key "9be513df12b3fabe7c1b8c3f9fab0968eb2168d5689bf981c2f7c35b11718b27" \
-      --json
-```
-``` json
-{
-  "result": "false"
-}
-```
-
-<br>
-
-### Verify hex-data with a signature and a key-file
-``` console
-cardano-signer verify \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key owner.staking.vkey
-```
-```
-true
-```
-``` console
-cardano-signer verify \
-      --data-hex "8f21b675423a65244483506122492f5720d7bd35d70616348089678ed4eb07a9" \
-      --signature "ca3ddc10f845dbe0c22875aaf91f66323d3f28e265696dcd3c56b91a8e675c9e30fd86ba69b9d1cf271a12f7710c9f3385c78cbf016e17e1df339bea8bd2db03" \
-      --public-key owner.staking.skey
-```
-You will also get errors if the provided key is not a public-key for example
-```
-Error: The file 'owner.staking.skey' is not a verification/public key json
-```
-
-<br>
-
-### Verify a file with a signature and a key-file
-``` console
-cardano-signer verify --data-file test.txt --public-key test.vkey \
-                      --signature "caacb18c46319f55b932efa77357f14b66b27aa908750df2c91800dc59711015ea2e568974ac0bcabf9b1c4708b877c2b94a7658c2dcad78b108049062572e09"
-```
-```
-true
-```
 
 <br>
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.12.0**
+  #### General:
+  	- The output via `--json-extended` is now showing more details about the address (hex, type, network)
+	- The help description can now be displayed for each sub command like: `cardano-signer sign --cip8 --help`
+	- Addresses provided via the `--address` parameter can now be a bech-address, hex-string or the path to a file containing the bech-address (typical mywallet.addr) files
+  #### CIP-8 / CIP-30 updates:
+	- Completely reworked CIP-8/CIP-30 code. Flags `--cip8` & `--cip30` will currently do the same, because CIP-30 uses CIP-8 signing.
+	- Signing a payload now generates a full COSE_Sign1 signature together with the COSE_Key publicKey
+	- The payload can be set to hashed via the new flag `--hashed`
+	- The payload can be excluded from the COSE_Sign1 signature with the new flag `--nopayload`
+	- The signing address will be automatically checked against the publicKey (signing and verification)
+	- Extended data structure check of the given COSE_Sign1 & COSE_Key
+	- Verification can be done against the COSE_Sign1 & COSE_Key, and optionally also against a given payload and address
+	- The output via `--json-extended` shows additional information if the payload is hashed, address infos, etc.
 
 * **1.11.0**
   #### General:
