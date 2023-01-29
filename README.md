@@ -601,9 +601,7 @@ Error: The given payment enterprise address 'addr_test1vpfwv0ezc5g8a4mkku8hhy3y3
 
 ## *Signing - Generate the registration metadata*
 
-![image](https://user-images.githubusercontent.com/47434720/208521648-d6d90d24-a2f8-4abd-ad32-009d1783cc6e.png)
 ![image](https://user-images.githubusercontent.com/47434720/215330136-9d99c86d-9545-4d8f-a79e-5806e98f5974.png)
-
 	      
 ### Register/Delegate to a single voting-key with minimal parameters (Mainnet example)
 ``` console
