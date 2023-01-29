@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.12.0"
+const version = "1.12.1"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -13,7 +13,7 @@ const fnv32 = require('fnv32'); //used for CIP-8/CIP-30 checksum generation (fnv
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key'],
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key'],
 	number: ['nonce', 'vote-weight', 'vote-purpose'],
 	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
@@ -81,10 +81,10 @@ switch (topic) {
 		console.log(`   Params: [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)${Reset}`);
 		console.log(`           ${FgGreen}--vote-weight${Reset} <unsigned_int>]			${Dim}relative weight of each delegated votingpower, default: 100% for a single delegation${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)${Reset}`);
-		console.log(`           ${FgGreen}--rewards-address${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}rewards payout address (address-file or a direct bech/hex format 'addr1..., addr_test1...')${Reset}`);
+		console.log(`           ${FgGreen}--payment-address${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}rewards payout address (address-file or a direct bech/hex format 'addr1..., addr_test1...')${Reset}`);
 		console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
-		console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--rewards-address needed${Reset}`);
+		console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--payment-address needed${Reset}`);
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex(text)${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -138,6 +138,7 @@ switch (topic) {
 		console.log(`${Dim}${Underscore}Info:${Reset}`);
 		console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
 		console.log(``)
+
 
 } //switch
 if ( exit ) { process.exit(1); }
@@ -632,9 +633,9 @@ async function main() {
 
                 case "sign-cip36":  //SIGN REGISTRATION DATA IN CIP-36 MODE (Catalyst)
 
-			//get rewards stakeaddress in bech format (must be a payment address again starting with catalyst fund10)
-			var address = args['rewards-address'];
-		        if ( typeof address === 'undefined' || address === true ) { console.error(`Error: Missing rewards payout address`); showUsage(workMode); }
+			//get rewards payoutaddress in bech format (must be a payment address again starting with catalyst fund10)
+			var address = args['payment-address'];
+		        if ( typeof address === 'undefined' || address === true ) { console.error(`Error: Missing rewards payout address (--payment-address)`); showUsage(workMode); }
 
 			//read the address from a file or direct hex/bech
 		        rewards_addr = readAddr2hex(address);
@@ -737,7 +738,7 @@ async function main() {
 			61284: {
 				  1: [[<vote_public_key_1>, <vote_weight_1>], [<vote_public_key_2>, <vote_weight_2>]],	// delegations - byte array(s) of the voting_public_keys and the relative voting_weight(unsigned int)
 				  2: <stake_public_key>, // stake_pub - byte array
-				  3: <stake_rewards_address>, // reward_address - byte array
+				  3: <payment_rewards_address>, // reward_address - byte array
 				  4: <nonce> // nonce = slotHeight (tip)
 				  5: <voting_purpose> // voting_purpose: 0 = Catalyst
 			}
@@ -776,7 +777,7 @@ async function main() {
 				var content = `{ "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr.hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
-				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description} (${vote_purpose})", "totalVoteWeight": ${total_vote_weight}, "rewardsAddressHex": "${rewards_addr.hex}", "rewardsAddressType": "${rewards_addr.type}", "rewardsAddressNetwork": "${rewards_addr.network}", "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `;
+				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description} (${vote_purpose})", "totalVoteWeight": ${total_vote_weight}, "paymentAddressHex": "${rewards_addr.hex}", "paymentAddressType": "${rewards_addr.type}", "paymentAddressNetwork": "${rewards_addr.network}", "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `;
 				var delegations = [];
 				for (let cnt = 0; cnt < all_vote_keys_array.length; cnt++) {
 				delegations.push(`[ "0x${all_vote_keys_array[cnt]}", ${all_weights_array[cnt]} ]`)
