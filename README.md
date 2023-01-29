@@ -30,7 +30,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.12.0
+cardano-signer 1.12.1
 
 Signing a hex/text-string or a binary-file:
 
@@ -67,10 +67,10 @@ Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
    Params: [--vote-public-key "<path_to_file>|<hex>|<bech>"     public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)
            --vote-weight <unsigned_int>]                        relative weight of each delegated votingpower, default: 100% for a single delegation
            --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stake key (votingpower)
-           --rewards-address "<path_to_file>|<hex>|<bech>"      rewards payout address (address-file or a direct bech/hex format 'addr1..., addr_test1...')
+           --payment-address "<path_to_file>|<hex>|<bech>"      rewards payout address (address-file or a direct bech/hex format 'addr1..., addr_test1...')
            [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
            [--vote-purpose <unsigned_int>]                      optional parameter (unsigned int), default: 0 (catalyst)
-           [--deregister]                                       optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--rewards-address needed
+           [--deregister]                                       optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--payment-address needed
            [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format, default: cborHex(text)
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
@@ -602,11 +602,13 @@ Error: The given payment enterprise address 'addr_test1vpfwv0ezc5g8a4mkku8hhy3y3
 ## *Signing - Generate the registration metadata*
 
 ![image](https://user-images.githubusercontent.com/47434720/208521648-d6d90d24-a2f8-4abd-ad32-009d1783cc6e.png)
+![image](https://user-images.githubusercontent.com/47434720/215330136-9d99c86d-9545-4d8f-a79e-5806e98f5974.png)
 
+	      
 ### Register/Delegate to a single voting-key with minimal parameters (Mainnet example)
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
+	--payment-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
 	--vote-public-key test.voting.vkey \
 	--secret-key myStakeKey.skey \
 	--json
@@ -631,7 +633,7 @@ The output in json format (Nonce automatically calculated from current machine t
 If you write out the output to a file via the `--out-file` or `--out-cbor` parameter, you can directly attach it to a transaction as metadata to execute the registration/delegation on chain.
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
+	--payment-address "addr1v9ux8dwy800s5pnq327g9uzh8f2fw98ldytxqaxumh3e8kqumfr6d" \
 	--vote-public-key test.voting.vkey \
 	--secret-key myStakeKey.skey \
 	--out-cbor myRegistration.cbor
@@ -646,7 +648,7 @@ cardano-signer sign --cip36 \
 
 ``` console
 cardano-signer sign --cip36 \
-      --rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
+      --payment-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
       --secret-key ../owner.staking.skey \
       --vote-public-key somevote.vkey \
       --nonce 71948552 \
@@ -664,7 +666,7 @@ a219ef64a50181825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047a
 
 ``` console
 cardano-signer sign --cip36 \
-      --rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
+      --payment-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
       --secret-key ../owner.staking.skey \
       --vote-public-key ../somevote.vkey \
       --vote-weight 10 \
@@ -683,7 +685,7 @@ a219ef64a50183825820423fa841abf9f7fa8dfa10dacdb6737b27fdb0d9bcd9b95d48cabb53047a
 Or with two voting-keys and votingpower 1 & 5 with a json-extended output
 ``` console
 cardano-signer sign --cip36 \
-	--rewards-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
+	--payment-address "addr_test1qrlvt2gzuvrhq7m2k00rsyzfrrqwx085cdqgum7w5nc2rxwpxkp2ajdyflxxmxztuqpu2pvvvc8p6tl3xu8a3dym5uls50mr97" \
 	--secret-key "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a" \
 	--vote-public-key ../myvote.voting.pkey --vote-weight 1 \
 	--vote-public-key vote-test.vkey --vote-weight 5 \
@@ -697,9 +699,9 @@ The output is a **way more detailed json** format, it contains the raw cbor outp
   "workMode": "sign-cip36",
   "votePurpose": "Catalyst (0)",
   "totalVoteWeight": 6,
-  "rewardsAddressHex": "00fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f",
-  "rewardsAddressType": "payment base",
-  "rewardsAddressNetwork": "testnet",
+  "paymentAddressHex": "00fec5a902e307707b6ab3de38104918c0e33cf4c3408e6fcea4f0a199c13582aec9a44fcc6d984be003c5058c660e1d2ff1370fd8b49ba73f",
+  "paymentAddressType": "payment base",
+  "paymentAddressNetwork": "testnet",
   "signDataHex": "1ebe4301d8db0af3c65682e8c9c70c0a22ecc474824d4688b6c24936b9d69fd4",
   "signature": "c5e380e1282b54d6e2f9004e73c533c5e1b135b81076859ff606a16dde410f8375164fc4c4d6c11e43633228687580b5bab02b3181908715f74efdefd2e63902",
   "secretKey": "f5beaeff7932a4164d270afde7716067582412e8977e67986cd9b456fc082e3a",
@@ -765,6 +767,11 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 ## Release Notes / Change-Logs
 
+* **1.12.1**
+  #### CIP-36 update:
+	- Changed the `--rewards-address` parameter to `--payment-address` parameter. This reflects the latest changes in CIP-36
+	- Also the keys for `rewardsAddressHex`,`rewardsAddressType` and `rewardsAddressNetwork` in the `--json-extended` output are not renamed to `paymentAddressHex`, `paymentAddressType`, `paymentAddressNetwork`
+	      
 * **1.12.0**
   #### General:
   	- The output via `--json-extended` is now showing more details about the address (hex, type, network)
