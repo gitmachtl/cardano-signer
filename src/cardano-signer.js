@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.12.1"
+const version = "1.13.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -10,19 +10,22 @@ const fs = require("fs"); //filesystem io
 const blakejs = require('blakejs'); //alternative blake2 implementation
 const base64url = require('base64url'); //used for the CIP-8/CIP-30 user facing signedMessage string "cms_..."
 const fnv32 = require('fnv32'); //used for CIP-8/CIP-30 checksum generation (fnv32a -> fnv32.fnv_1a) for the user facing signedMessage string "cms_..."
+const bip39 = require('bip39'); //used for mnemonics operations
+const crypto = require('crypto'); //used for crypto functions like entropy generation
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key'],
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key', 'mnemonics', 'path'],
 	number: ['nonce', 'vote-weight', 'vote-purpose'],
-	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload'], //all booleans are set to false per default
+	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload', 'with-chain-code'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech' }
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics' }
 };
 const args = require('minimist')(process.argv.slice(2),parse_options);
 
 //various constants
 const regExpHex = /^[0-9a-fA-F]+$/;
+const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
 
 //catch all exceptions that are not catched via try
 process.on('uncaughtException', function (error) {
@@ -38,7 +41,7 @@ switch (topic) {
 
 	case 'sign':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Signing a hex/text-string or a binary-file:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign a hex/text-string or a binary-file:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign${Reset}`);
 		console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"`);
@@ -55,7 +58,7 @@ switch (topic) {
 	case 'sign-cip8':
 	case 'sign-cip30':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Signing a payload in CIP-8 / CIP-30 mode:${Reset} (COSE_Sign1 only currently)`)
+	        console.log(`${Bright}${Underscore}Sign a payload in CIP-8 / CIP-30 mode:${Reset} (COSE_Sign1 only currently)`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip8${Reset}`);
 	        console.log(`           ${Bright}${appname} ${FgGreen}sign --cip30${Reset}`);
@@ -75,7 +78,7 @@ switch (topic) {
 	case 'sign-cip36':
 	case 'sign-cip36-deregister':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Signing a catalyst registration/delegation or deregistration in CIP-36 mode:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign a catalyst registration/delegation or deregistration in CIP-36 mode:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip36${Reset}`);
 		console.log(`   Params: [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)${Reset}`);
@@ -95,11 +98,11 @@ switch (topic) {
 
 	case 'verify':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Verifying a hex/text-string or a binary-file via signature + publicKey:${Reset}`)
+	        console.log(`${Bright}${Underscore}Verify a hex/text-string or a binary-file via signature + publicKey:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify${Reset}`);
 		console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
-		console.log(`								${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
+		console.log(`							${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
 		console.log(`           ${FgGreen}--signature${Reset} "<hex>|<bech>"				${Dim}signature in hex- or bech-format${Reset}`);
 		console.log(`           ${FgGreen}--public-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a public-key-file or a direct public hex/bech-key string${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional address check against the public-key (address-file or a direct bech/hex format)${Reset}`);
@@ -112,7 +115,7 @@ switch (topic) {
 	case 'verify-cip8':
 	case 'verify-cip30':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Verifying a CIP-8 / CIP-30 payload:${Reset} (COSE_Sign1 only currently)`)
+	        console.log(`${Bright}${Underscore}Verify a CIP-8 / CIP-30 payload:${Reset} (COSE_Sign1 only currently)`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip8${Reset}`);
 	        console.log(`           ${Bright}${appname} ${FgGreen}verify --cip30${Reset}`);
@@ -128,12 +131,33 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'keygen':
+	case 'keygen-cip36':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Generate Cardano ed25519/ed25519-extended keys:${Reset}`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}keygen${Reset}`);
+		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
+		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36${Reset}`);
+		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
+		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
+		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
+		console.log(`           [${FgGreen}--with-chain-code${Reset}] 					${Dim}optional flag to generate a 128byte secretKey and 64byte publicKey with chain code${Reset}`);
+		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+		console.log(`           [${FgGreen}--out-skey${Reset} "<path_to_skey_file>"]			${Dim}path to an output skey-file${Reset}`);
+		console.log(`           [${FgGreen}--out-vkey${Reset} "<path_to_vkey_file>"]			${Dim}path to an output vkey-file${Reset}`);
+	        console.log(`   Output: ${FgCyan}"secretKey + publicKey"${Reset} or ${FgCyan}JSON-Format${Reset}		${Dim}default: hex-format${Reset}`);
+	        console.log(``)
+		break;
+
 	default:
 		showUsage('sign',false);
 		showUsage('sign-cip8',false)
 		showUsage('sign-cip36',false)
 		showUsage('verify',false)
 		showUsage('verify-cip8',false)
+		showUsage('keygen',false)
 		console.log(``)
 		console.log(`${Dim}${Underscore}Info:${Reset}`);
 		console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
@@ -145,8 +169,24 @@ if ( exit ) { process.exit(1); }
 }
 
 
+//function to count the words in a string
+function wordCount(s) {
+        return s.split(' ')
+                .filter(function(n) { return n != '' })
+                .length;
+}
+
+//trimString function to cut of leading or trailing white-spaces and newline chars
 function trimString(s){
         s = s.replace(/(^\s*)|(\s*$)/gi,"");    //exclude start and end white-space
+        s = s.replace(/\n /,"\n");              // exclude newline with a start spacing
+        return s;
+}
+
+//Special trimString variant to also reduce spaces between words
+function trimMnemonic(s){
+        s = s.replace(/(^\s*)|(\s*$)/gi,"");    // exclude start and end white-space
+        s = s.replace(/[ ]{2,}/gi," ");         // 2 or more space between words to 1
         s = s.replace(/\n /,"\n");              // exclude newline with a start spacing
         return s;
 }
@@ -991,14 +1031,10 @@ async function main() {
 			if ( args['json'] === true ) { //generate content in json format
 				var content = `{ "result": "${verified}" }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
-
-try {
-
 				var content = `{ "workMode": "${workMode}", "result": "${verified}", `;
 				if ( verify_data_hex.length <= 2000000 ) { content += `"verifyDataHex": "${verify_data_hex}", `; } //only include the verify_data_hex if it is less than 2M of chars
 				if ( typeof verify_addr !== 'undefined' ) { content += `"addressHex": "${verify_addr.hex}", "addressType": "${verify_addr.type}", "addressNetwork": "${verify_addr.network}", `; } //only include the verification address if provided
 				content += `"signature": "${signature}", "publicKey": "${public_key}" }`;
-} catch (error) { console.error(error) }
 			} else { //generate content in text format
 				var content = `${verified}`;
 			}
@@ -1231,6 +1267,206 @@ try {
 			//exit with the right exitcode
 			if ( verified ) { process.exit(0); }  //TRUE
 				   else { process.exit(1); }  //FALSE
+
+			break;
+
+
+                case "keygen":  //KEY GENERATION
+                case "keygen-cip36":
+
+			//setup
+			var XpubKeyHex = '', XpubKeyBech = ''; vote_purpose = 0;
+
+			//get the path parameter, if ok set the derivation_path variable
+			var derivation_path = args['path'];
+		        if ( typeof derivation_path === 'string' && derivation_path != '' ) { //ok, a path was provided let check
+				derivation_path = trimString(derivation_path.toUpperCase());
+
+				//predefined derivation paths via name
+				switch (derivation_path) {
+					case 'PAYMENT': derivation_path = '1852H/1815H/0H/0/0'; break;
+					case 'STAKE': derivation_path = '1852H/1815H/0H/2/0'; break;
+					case 'CIP36': derivation_path = '1694H/1815H/0H/0/0'; break;
+				}
+
+				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
+				if ( ! regExpPath.test(derivation_path) ) { console.error(`Error: The provided derivation --path '${derivation_path}' does not match the right format! Example: 1852H/1815H/0H/0/0`); process.exit(1); }
+			} else {
+				var derivation_path = ''; //no path provided, set the derivation_path variable to be empty
+			}
+
+
+			//load or overwrite derivation path if CIP36 vote keys are selected
+			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0'
+
+				//get the --vote-purpose parameter, set default = 0
+				var vote_purpose_param = args['vote-purpose'];
+			        if ( typeof vote_purpose_param === 'undefined' ) { vote_purpose = 0 }  //if not defined, set it to default=0
+			        else if ( typeof vote_purpose_param === 'number' && vote_purpose_param >= 0 ) { vote_purpose = vote_purpose_param }
+				else { console.error(`Error: Please specify a --vote-purpose parameter with an unsigned integer value >= 0`); process.exit(1); }
+
+			}
+
+			//get a cleartext description of the purpose (shown in the --json-extended output)
+			switch (vote_purpose) {
+				case 0: var vote_purpose_description="Catalyst"; break;
+				default: var vote_purpose_description="Unknown";
+			}
+
+			//get mnemonics parameter, if ok set the mnemonics variable
+			var mnemonics = args['mnemonics'];
+		        if ( typeof mnemonics === 'string' && mnemonics != '' ) { //ok, a path was provided let check
+				mnemonics = trimMnemonic(mnemonics.toLowerCase());
+				var mnemonicsWordCount = wordCount(mnemonics);
+				if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: Please provide between 12 and 24 words for the --mnemonics.`); process.exit(1); }
+
+				//calculate the entropy of the given mnemonic
+				try {
+					var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
+				} catch (error) { console.error(`Error: The provided mnemonics are not valid, please check the correct spelling. '${error}'`); process.exit(1); }
+
+				//set the derivation path to the default if not already set before
+				if ( derivation_path == '' ) { derivation_path = '1852H/1815H/0H/0/0'; }
+
+			} else { //no mnemonics provided, generate a random entropy and get the mnemonics from it
+				var entropy = crypto.randomBytes(32); //new random entropy
+				var mnemonics = bip39.entropyToMnemonic(entropy); //get the mnemonics from the entropy
+			}
+
+			//if there is no derivation_path set, than a simple normal ed25519 key (not derived) is requested
+			if ( derivation_path == '' ) { //generate a simple ed25519 keypair
+
+				try {
+				        var rootKey = CardanoWasm.PrivateKey.generate_ed25519(); //generate a new ed25519 key
+					var prvKeyHex = Buffer.from(rootKey.as_bytes()).toString('hex'); //private-secret key in hex format
+					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //public key in hex format
+				} catch (error) { console.error(`Error: Could not generate a new ed25519 keypair. '${error}'`); process.exit(1); }
+				var entropy = '', mnemonics = '';
+
+			} else { //derivation path is present
+
+				try {
+					var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics)
+				} catch (error) { console.error(`Error: Could not generate the rootKey from the entropy/mnemonic. '${error}'`); process.exit(1); }
+
+				var pathArray = derivation_path.split('/');
+				pathArray.forEach( (element, index) => {
+					var numPath = 0;
+					//check if last char is an H, if so, add the hardened offset value
+					if ( element[element.length - 1] == 'H' ) {
+						 numPath+=0x80000000; //hardened path add the 0x80000000 offset
+						 element = element.slice(0,-1); //remove the last char 'H' so only a number is left
+					}
+					numPath += Number(element); //add+convert the element number
+					//derive the path
+					try {
+						rootKey = rootKey.derive(numPath);
+					} catch (error) { console.error(`Error: Could not derive the given path from the rootKey. '${error}'`); process.exit(1); }
+
+					//get the Xpublickey after the 3rd derived path (index=2)
+					if ( index == 2 ) {
+						XpubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //Xpublic key in hex format (64bytes)
+						XpubKeyBech = bech32.encode("Xpub", bech32.toWords(Buffer.from(XpubKeyHex, "hex")), 128);
+					}
+				});
+
+				//if the extra flag 'with-chain-code' is set, generate a 128byte private key and a 64byte public key. otherwise generate a 64byte private key and 32byte public key
+				if ( args['with-chain-code'] === true ) {
+					var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //public key in hex format (64bytes)
+				} else {
+					var prvKeyHex = Buffer.from(rootKey.to_raw_key().as_bytes()).toString('hex'); //private-secret key in hex format (64bytes)
+					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex').substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+				}
+
+			}
+
+			//generate the cbor representation of the private & public key
+			var prvKeyCbor = cbor.encode(Buffer.from(prvKeyHex,'hex')).toString('hex')
+			var pubKeyCbor = cbor.encode(Buffer.from(pubKeyHex,'hex')).toString('hex')
+
+			//generate the content of the skey/vkey files
+			if ( derivation_path == '' ) { //simple ed25519 keys
+
+				var skeyContent = `{ "type": "PaymentSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+				var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+
+			} else if ( derivation_path.substring(0,11) == '1694H/1815H' ) { //CIP36 voting keys
+
+				var skeyContent = `{ "type": "CIP36VoteExtendedSigningKey_ed25519", "description": "${vote_purpose_description} Vote Signing Key", "cborHex": "${prvKeyCbor}" }`;
+				if ( args['with-chain-code'] === true ) {
+					var vkeyContent = `{ "type": "CIP36VoteExtendedVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+				} else {
+					var vkeyContent = `{ "type": "CIP36VoteVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+				}
+
+			} else if ( derivation_path.substring(0,11) == '1852H/1815H' ) { //Extended Payment/Staking keys
+
+				//check if purpose is a stake key
+				if ( derivation_path.split('/')[3] == '2' ) {
+					var skeyContent = `{ "type": "StakeExtendedSigningKeyShelley_ed25519_bip32", "description": "Stake Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var vkeyContent = `{ "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32", "description": "Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
+				} else { //looks like a payment key
+					var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+				}
+
+			} else { //generic ones
+					var skeyContent = `{ "type": "ExtendedSigningKeyShelley_ed25519_bip32", "description": "Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var vkeyContent = `{ "type": "ExtendedVerificationKeyShelley_ed25519_bip32", "description": "Verification Key", "cborHex": "${pubKeyCbor}" }`;
+			}
+
+
+			//compose the content for the output as JSON, extended JSON data or plain hex
+			if ( args['json'] === true ) { //generate content in json format
+				var content = `{ "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}" }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var content = `{ "workMode": "${workMode}"`
+				if ( derivation_path != '' ) { content += `, "path": "${derivation_path}"`; }
+				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
+				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
+				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
+				if ( args['cip36'] === true ) {
+					content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`;
+					prvKeyBech = bech32.encode("cvote_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+					pubKeyBech = bech32.encode("cvote_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+				content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`;
+				}
+				content += `, "output": { "skey": ${skeyContent}, "vkey": ${vkeyContent} } }`
+			} else { //generate content in text format
+				var content = `${prvKeyHex} ${pubKeyHex}`;
+			}
+
+			//output the content to the console or to a file
+			var out_file = args['out-file'];
+		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
+			else { //else try to write the content out to the given file
+				try {
+				fs.writeFileSync(out_file,content, 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output a secret file (.skey)
+			var out_skey = args['out-skey'];
+		        //if there is a --out-skey parameter specified then try to write output the file
+			if ( typeof out_skey === 'string' && out_skey != '' ) {
+				try {
+				fs.writeFileSync(out_skey,JSON.stringify(JSON.parse(skeyContent), null, 2) + '\n', 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output a verification file (.vkey)
+			var out_vkey = args['out-vkey'];
+		        //if there is a --out-vkey parameter specified then try to write output the file
+			if ( typeof out_vkey === 'string' && out_vkey != '' ) {
+				try {
+				fs.writeFileSync(out_vkey,JSON.stringify(JSON.parse(vkeyContent), null, 2) + '\n', 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
 
 			break;
 
