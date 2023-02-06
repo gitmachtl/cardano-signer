@@ -1,4 +1,4 @@
-# Tool to sign & verify data with a Cardano-Secret/Public-Key // sign & verify CIP-8, CIP-30 & CIP-36 data
+# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -8,7 +8,9 @@
 * **Sign** any hexdata, textdata or binaryfile with a provided normal or extended secret key. The key can be provided in hex, bech or file format. The signing output is a signature in hex- or json-format, also the public key of the provided secret key for verification. With the enabled `--jcli` flag the generated signature and public key will be return in a **jcli** compatible bech format. **Cardano-signer can be used instead of jcli for signing**.
 * Sign payloads in **CIP-8 / CIP-30** mode, hashed or not hashed, with or without a payload in the output. The signing output is a COSE_Sign1 signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
-* A given address will automatically be checked against the used publicKey
+* Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
+* Generate CIP36 voting-keys.
+* A given address will automatically be checked against the used publicKey.
 
 ### What can cardano-signer verify?
 * **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
@@ -21,7 +23,7 @@
 * **[Default mode](#default-mode)**: Sign and verify data with ed25519(cardano) keys
 * **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
-
+* **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths
 &nbsp;<p>
 
 ## Full syntax
@@ -30,9 +32,9 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.12.1
+cardano-signer 1.13.0
 
-Signing a hex/text-string or a binary-file:
+Sign a hex/text-string or a binary-file:
 
    Syntax: cardano-signer sign
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
@@ -45,7 +47,7 @@ Signing a hex/text-string or a binary-file:
    Output: "signature + publicKey" or JSON-Format               default: hex-format
 
 
-Signing a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
+Sign a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
 
    Syntax: cardano-signer sign --cip8
            cardano-signer sign --cip30
@@ -61,7 +63,7 @@ Signing a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
    Output: "COSE_Sign1 + COSE_Key" or JSON-Format
 
 
-Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
+Sign a catalyst registration/delegation or deregistration in CIP-36 mode:
 
    Syntax: cardano-signer sign --cip36
    Params: [--vote-public-key "<path_to_file>|<hex>|<bech>"     public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)
@@ -78,11 +80,11 @@ Signing a catalyst registration/delegation or deregistration in CIP-36 mode:
    Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
 
 
-Verifying a hex/text-string or a binary-file via signature + publicKey:
+Verify a hex/text-string or a binary-file via signature + publicKey:
 
    Syntax: cardano-signer verify
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
-                                                                data/payload/file to verify in hex-, text- or binary-file-format
+                                                        data/payload/file to verify in hex-, text- or binary-file-format
            --signature "<hex>|<bech>"                           signature in hex- or bech-format
            --public-key "<path_to_file>|<hex>|<bech>"           path to a public-key-file or a direct public hex/bech-key string
            [--address "<path_to_file>|<hex>|<bech>"]            optional address check against the public-key (address-file or a direct bech/hex format)
@@ -91,7 +93,7 @@ Verifying a hex/text-string or a binary-file via signature + publicKey:
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 
-Verifying a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
+Verify a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
 
    Syntax: cardano-signer verify --cip8
            cardano-signer verify --cip30
@@ -105,6 +107,21 @@ Verifying a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
+
+Generate Cardano ed25519/ed25519-extended keys:
+
+   Syntax: cardano-signer keygen
+   Params: [--path "<derivationpath>"]                          optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"
+                                                                or predefined names: --path payment, --path stake, --path cip36
+           [--mnemonics "word1 word2 ... word24"]               optional mnemonic words to derive the key from (separate via space)
+           [--cip36]                                            optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)
+           [--vote-purpose <unsigned_int>]                      optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)
+           [--with-chain-code]                                  optional flag to generate a 128byte secretKey and 64byte publicKey with chain code
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+           [--out-skey "<path_to_skey_file>"]                   path to an output skey-file
+           [--out-vkey "<path_to_vkey_file>"]                   path to an output vkey-file
+   Output: "secretKey + publicKey" or JSON-Format               default: hex-format
 ```
 
 <br>
@@ -757,6 +774,221 @@ The output is a human-readable json format, if you redirect it to a file via the
 }
 ```
 
+
+&nbsp;<p>&nbsp;<p>
+
+# KeyGeneration mode
+
+![image](https://user-images.githubusercontent.com/47434720/217050845-b1d36238-04e3-4955-8fb9-6d21f71eecc0.png)
+
+## *Normal ed25519 keypair without derivation-path/mnemonics*
+
+### Generate a keypair in hex-format
+``` console
+cardano-signer keygen
+```
+Output - secretKey & publicKey (hex) :
+```
+1e0e5b1614ad54e170a43ce74fd53e29217ec4ba341d9ad52d97c30ba696bb9c 1d8f971d0b8553981c90e1b5d2884e8190b21f5547c2a784fc65c59cf022d4b2
+```
+You can generate a nice json output via the `--json` or `--json-extended` flag
+``` console
+cardano-signer keygen --json-extended
+```
+``` json
+{
+  "workMode": "keygen",
+  "secretKey": "629ebc4ca6ace67f7b427bf728b39aa5d7bb2f8851f88575d8cee8d112a0956c",
+  "publicKey": "f987631d2e136fc9905f8f7f27a8654a5f86834e118c2873d805f2573e41d0c2",
+  "output": {
+    "skey": {
+      "type": "PaymentSigningKeyShelley_ed25519",
+      "description": "Payment Signing Key",
+      "cborHex": "5820629ebc4ca6ace67f7b427bf728b39aa5d7bb2f8851f88575d8cee8d112a0956c"
+    },
+    "vkey": {
+      "type": "PaymentVerificationKeyShelley_ed25519",
+      "description": "Payment Verification Key",
+      "cborHex": "5820f987631d2e136fc9905f8f7f27a8654a5f86834e118c2873d805f2573e41d0c2"
+    }
+  }
+}
+```
+<br>
+
+### Generate .skey/.vkey files
+
+You can also directly generate .skey/.vkey files via the `--out-skey` & `--out-vkey` parameter
+``` console
+cardano-signer keygen --json-extended \
+                    --out-skey test.skey \
+		    --out-vkey test.vkey
+```
+This generates the typical .skey/.vkey files with content like
+``` json
+{
+      "type": "PaymentSigningKeyShelley_ed25519",
+      "description": "Payment Signing Key",
+      "cborHex": "5820629ebc4ca6ace67f7b427bf728b39aa5d7bb2f8851f88575d8cee8d112a0956c"
+}
+```
+``` json
+{
+      "type": "PaymentVerificationKeyShelley_ed25519",
+      "description": "Payment Verification Key",
+      "cborHex": "5820f987631d2e136fc9905f8f7f27a8654a5f86834e118c2873d805f2573e41d0c2"
+}
+```
+
+<br>
+
+## *ed25519-extended keys with a derivation-path*
+
+### Generate a keypair from the standard payment path
+``` console
+cardano-signer keygen \
+	--path 1852H/1815H/0H/0/0 \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen",
+  "path": "1852H/1815H/0H/0/0",
+  "mnemonics": "indoor wear trap injury weapon thing genre dad marriage hurry craft barrel carry casual orient bitter reward spider earn three reward afraid follow mobile",
+  "secretKey": "406f4acc96cde9c98e95a98c48af46230112198ede4e98455e08537b63d3075c07aaf7933db85cf6081791f1c51355e4a6677dd1bf182ffd1e45f1e223e831ac",
+  "publicKey": "e5f99ed635d5616c756e20b3aa63700dfe72dcd7fbdf706eb5337770055b9b7f",
+  "XpubKeyHex": "4cc3dea9594895b865419aba218441879c8268de7045955872a5ed24e520de5a39481c4e2a623fcef20482f73f5535dd8aa487e330ccaa04464e5222d1017b1a",
+  "XpubKeyBech": "xpub1fnpaa22efz2mse2pn2azrpzps7wgy6x7wpze2krj5hkjfefqmedrjjqufc4xy07w7gzg9ael256amz4ysl3npn92q3ryu53z6yqhkxss8pa0p",
+  "output": {
+    "skey": {
+      "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
+      "description": "Payment Signing Key",
+      "cborHex": "5840406f4acc96cde9c98e95a98c48af46230112198ede4e98455e08537b63d3075c07aaf7933db85cf6081791f1c51355e4a6677dd1bf182ffd1e45f1e223e831ac"
+    },
+    "vkey": {
+      "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32",
+      "description": "Payment Verification Key",
+      "cborHex": "5820e5f99ed635d5616c756e20b3aa63700dfe72dcd7fbdf706eb5337770055b9b7f"
+    }
+  }
+}
+```
+As you can see, this generate a new keypair from new random mnemonics for the given derivation path `1852H/1815H/0H/0/0`. You can also use the format "1852'/1815'/0'/0/0" for the path, just make sure you put the whole path in doublequotes. 
+
+This generated mnemonics is the Shelley(Icarus) standard mnemonic and will work with all major wallets like Eternl, Typhoon, etc.
+
+Also a `Xpub...` key was generated, which can be used to view wallet data in external tracking apps.
+<br>
+
+### Generate .skey/.vkey files
+
+Like with the normal ed25519 keys, use the `--out-skey` & `--out-vkey` parameter to directly write out .skey/.vkey files.
+``` console
+cardano-signer keygen \
+	--path 1852H/1815H/0H/2/0 \
+	--json-extended
+	--out-skey stake.skey \
+	--out-vkey stake.vkey
+```
+This generates the typical .skey/.vkey files with content like
+``` json
+{
+      "type": "StakeExtendedSigningKeyShelley_ed25519_bip32",
+      "description": "Stake Signing Key",
+      "cborHex": "5840f0a67a2da52bab4b8c937f8eaffff7471b9e90cd14c22c4354d25dece70e54503b3ecc59893bd937ee43df012c254b643a41ebd0ef13ae5ef3e691ac7bc2b634"
+}
+```
+``` json
+{
+      "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32",
+      "description": "Stake Verification Key",
+      "cborHex": "58205a99e2dbbbb23fdae6af97b7a540b70dc68cde49e816c632accfbb5533bebdf5"
+}
+```
+
+<br>
+
+## *CIP36 voting keys without/with mnemonics*
+
+### Generate a keypair from the specific 1694H/1815H/0H/0/0 CIP36 path without mnemonics
+``` console
+cardano-signer keygen \
+	--cip36 \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen-cip36",
+  "path": "1694H/1815H/0H/0/0",
+  "mnemonics": "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair",
+  "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8",
+  "publicKey": "8f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea",
+  "XpubKeyHex": "81d2f04ba976badf5f83711c904898f26f08c64de2185b3fb3c46fdb7f37bae4e093e35996924a30f98a169d862f57b248cb95eb77ba50ce4d24b76c1859e21a",
+  "XpubKeyBech": "xpub1s8f0qjafw6ad7hurwywfqjyc7fhs33jdugv9k0anc3haklehhtjwpylrtxtfyj3slx9pd8vx9atmyjxtjh4h0wjseexjfdmvrpv7yxsku9k6z",
+  "votePurpose": "Catalyst (0)",
+  "secretKeyBech": "cvote_sk1zpkptpr5ha7vvd9agd5vd8vr5rvexramsqm0fyzmamrmt7pwv4r66zygwyt6lf78ldzjaqcurs2h65ck3dwv7235n9jysklgwltfe7q0y0yjp",
+  "publicKeyBech": "cvote_vk13uwp8z56rkw9fsugs8xag6h2776qnsk6kvx3dq6yjdxng2v6dh4qtskqms",
+  "output": {
+    "skey": {
+      "type": "CIP36VoteExtendedSigningKey_ed25519",
+      "description": "Catalyst Vote Signing Key",
+      "cborHex": "5840106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8"
+    },
+    "vkey": {
+      "type": "CIP36VoteVerificationKey_ed25519",
+      "description": "Catalyst Vote Verification Key",
+      "cborHex": "58208f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea"
+    }
+  }
+}
+```
+Providing the `--cip36` flag sets the parameters to generate CIP36 conform voting key.
+
+You can achieve the same result by setting `--path 1694H/1815H/0H/0/0` or using the shortcut `--path cip36`.
+
+Like with the examples before, you can write out .skey/.vkey files if needed.
+
+Such a generated voting key can be used to be included in the CIP36(Catalyst) registration metadata, which can also be generated & signed by cardano-signer. You can delegate Voting-Power to such a voting key. Later on you can restore a Wallet in a dApp enabled LightWallet like Eternl with the generated mnemonics to do the Voting via the VotingCenter.
+
+<br>
+
+### Generate a keypair with given mnemonics
+``` console
+cardano-signer keygen \
+	--path 1694H/1815H/0H/0/0 \
+	--mnemonics "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair" \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen-cip36",
+  "path": "1694H/1815H/0H/0/0",
+  "mnemonics": "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair",
+  "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8",
+  "publicKey": "8f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea",
+  "XpubKeyHex": "81d2f04ba976badf5f83711c904898f26f08c64de2185b3fb3c46fdb7f37bae4e093e35996924a30f98a169d862f57b248cb95eb77ba50ce4d24b76c1859e21a",
+  "XpubKeyBech": "xpub1s8f0qjafw6ad7hurwywfqjyc7fhs33jdugv9k0anc3haklehhtjwpylrtxtfyj3slx9pd8vx9atmyjxtjh4h0wjseexjfdmvrpv7yxsku9k6z",
+  "votePurpose": "Catalyst (0)",
+  "secretKeyBech": "cvote_sk1zpkptpr5ha7vvd9agd5vd8vr5rvexramsqm0fyzmamrmt7pwv4r66zygwyt6lf78ldzjaqcurs2h65ck3dwv7235n9jysklgwltfe7q0y0yjp",
+  "publicKeyBech": "cvote_vk13uwp8z56rkw9fsugs8xag6h2776qnsk6kvx3dq6yjdxng2v6dh4qtskqms",
+  "output": {
+    "skey": {
+      "type": "CIP36VoteExtendedSigningKey_ed25519",
+      "description": "Catalyst Vote Signing Key",
+      "cborHex": "5840106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8"
+    },
+    "vkey": {
+      "type": "CIP36VoteVerificationKey_ed25519",
+      "description": "Catalyst Vote Verification Key",
+      "cborHex": "58208f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea"
+    }
+  }
+}
+```
+If you provide mnemonics via the `--mnemonics` parameter, these mnemonics will be used to derive the keys from. So you can also for example convert your Daedalus Wallet into .skey/.vkey files.
 <br>
 
 
@@ -764,6 +996,17 @@ The output is a human-readable json format, if you redirect it to a file via the
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.13.0**
+  #### New key generation mode:
+  	- generate normal ed25519 keys
+	- generate extended ed25519 keys from a derivation path like "1852H/1815H/0H/0/0"
+	- generate keys from mnemonics or let cardano-signer generate new mnemonics for you
+	- generate CIP36 conform vote keys incl. bech `cvote_vk` data and an optional vote_purpose
+	- generate keys with or without chaincode attached
+	- directly write out `.skey`/`.vkey` files (like cardano-cli)
+	- extended information like an `Xpub...` key is available via the `--json-extended` flag
+	- shortcuts for paths can be used like `--path payment`, `--path stake`, `--path cip36`
 
 * **1.12.1**
   #### CIP-36 update:
