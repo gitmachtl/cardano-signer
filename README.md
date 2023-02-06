@@ -874,16 +874,16 @@ Output - JSON Format:
   }
 }
 ```
-As you can see, this generate a new keypair from new random mnemonics for the given derivation path `1852H/1815H/0H/0/0`. You can also use the format "1852'/1815'/0'/0/0" for the path, just make sure you put the whole path in doublequotes. 
+As you can see, this generates a new keypair with random mnemonics for the given derivation path `1852H/1815H/0H/0/0`. You can also use the format "1852'/1815'/0'/0/0" for the path, just make sure you put the whole path in doublequotes. 
 
-This generated mnemonics is the Shelley(Icarus) standard mnemonic and will work with all major wallets like Eternl, Typhoon, etc.
+This generated mnemonics are in the Shelley(Icarus) standard BIP39 format and will work with all major wallets like Eternl, Typhoon, etc.
 
 Also a `Xpub...` key was generated, which can be used to view wallet data in external tracking apps.
 <br>
 
 ### Generate .skey/.vkey files
 
-Like with the normal ed25519 keys, use the `--out-skey` & `--out-vkey` parameter to directly write out .skey/.vkey files.
+Like with the normal ed25519 keys, use the `--out-skey` & `--out-vkey` parameters to directly write out .skey/.vkey files.
 ``` console
 cardano-signer keygen \
 	--path 1852H/1815H/0H/2/0 \
