@@ -1,3 +1,5 @@
+#!/usr/bin / env node
+
 //define name and version
 const appname = "cardano-signer"
 const version = "1.13.0"
