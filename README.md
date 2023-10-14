@@ -9,6 +9,7 @@
 * Sign payloads in **CIP-8 / CIP-30** mode, hashed or not hashed, with or without a payload in the output. The signing output is a COSE_Sign1 signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 * Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
+* Generate conway **dRep Keys** with or without **mnemonic words**.
 * Generate CIP36 voting-keys.
 * A given address will automatically be checked against the used publicKey.
 
@@ -112,16 +113,17 @@ Generate Cardano ed25519/ed25519-extended keys:
 
    Syntax: cardano-signer keygen
    Params: [--path "<derivationpath>"]                          optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"
-                                                                or predefined names: --path payment, --path stake, --path cip36
+                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep
            [--mnemonics "word1 word2 ... word24"]               optional mnemonic words to derive the key from (separate via space)
            [--cip36]                                            optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)
            [--vote-purpose <unsigned_int>]                      optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)
-           [--with-chain-code]                                  optional flag to generate a 128byte secretKey and 64byte publicKey with chain code
+           [--vkey-extended]                                    optional flag to generate a 64byte publicKey with chain code
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
            [--out-skey "<path_to_skey_file>"]                   path to an output skey-file
            [--out-vkey "<path_to_vkey_file>"]                   path to an output vkey-file
    Output: "secretKey + publicKey" or JSON-Format               default: hex-format
+
 ```
 
 <br>
@@ -779,7 +781,7 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 # KeyGeneration mode
 
-![image](https://user-images.githubusercontent.com/47434720/217050845-b1d36238-04e3-4955-8fb9-6d21f71eecc0.png)
+![image](https://github.com/gitmachtl/cardano-signer/assets/47434720/dcc0119f-cab5-4645-a439-35aeedc27e29)
 
 ## *Normal ed25519 keypair without derivation-path/mnemonics*
 
@@ -855,21 +857,21 @@ Output - JSON Format:
 {
   "workMode": "keygen",
   "path": "1852H/1815H/0H/0/0",
-  "mnemonics": "indoor wear trap injury weapon thing genre dad marriage hurry craft barrel carry casual orient bitter reward spider earn three reward afraid follow mobile",
-  "secretKey": "406f4acc96cde9c98e95a98c48af46230112198ede4e98455e08537b63d3075c07aaf7933db85cf6081791f1c51355e4a6677dd1bf182ffd1e45f1e223e831ac",
-  "publicKey": "e5f99ed635d5616c756e20b3aa63700dfe72dcd7fbdf706eb5337770055b9b7f",
-  "XpubKeyHex": "4cc3dea9594895b865419aba218441879c8268de7045955872a5ed24e520de5a39481c4e2a623fcef20482f73f5535dd8aa487e330ccaa04464e5222d1017b1a",
-  "XpubKeyBech": "xpub1fnpaa22efz2mse2pn2azrpzps7wgy6x7wpze2krj5hkjfefqmedrjjqufc4xy07w7gzg9ael256amz4ysl3npn92q3ryu53z6yqhkxss8pa0p",
+  "mnemonics": "snap siege fatal leopard label thunder rely trap robot identify someone exclude glance spring right rude tower pluck explain mouse scheme sister onion include",
+  "secretKey": "60f0a79e0776b4063d7bff8ada6a37b5fb79168d5e844b51e45fa5088eac6558f858251fdfd2fc55488fceb448c5d8f5d1c93cea5505df05efed86efd90ded6d4db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf52479eeb435bd154d50e80b2980900ac2d8237408ae373daf68d19b6013f5fcd2ef2",
+  "publicKey": "4db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf5247",
+  "XpubKeyHex": "f1d184dc020c90ed0ab318f98b2bbf0b215723d3e68121fba9b12bd5389fa9a3cb01f7d31f63fd73c7406a4381066c747b2cc6eafccbc1f85eb24f664238216a",
+  "XpubKeyBech": "xpub178gcfhqzpjgw6z4nrruck2alpvs4wg7nu6qjr7afky4a2wyl4x3ukq0h6v0k8ltncaqx5supqek8g7evcm40ej7plp0tynmxgguzz6sm2mv70",
   "output": {
     "skey": {
       "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
       "description": "Payment Signing Key",
-      "cborHex": "5840406f4acc96cde9c98e95a98c48af46230112198ede4e98455e08537b63d3075c07aaf7933db85cf6081791f1c51355e4a6677dd1bf182ffd1e45f1e223e831ac"
+      "cborHex": "588060f0a79e0776b4063d7bff8ada6a37b5fb79168d5e844b51e45fa5088eac6558f858251fdfd2fc55488fceb448c5d8f5d1c93cea5505df05efed86efd90ded6d4db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf52479eeb435bd154d50e80b2980900ac2d8237408ae373daf68d19b6013f5fcd2ef2"
     },
     "vkey": {
-      "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32",
+      "type": "PaymentVerificationKeyShelley_ed25519",
       "description": "Payment Verification Key",
-      "cborHex": "5820e5f99ed635d5616c756e20b3aa63700dfe72dcd7fbdf706eb5337770055b9b7f"
+      "cborHex": "58204db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf5247"
     }
   }
 }
@@ -887,23 +889,23 @@ Like with the normal ed25519 keys, use the `--out-skey` & `--out-vkey` parameter
 ``` console
 cardano-signer keygen \
 	--path 1852H/1815H/0H/2/0 \
-	--json-extended
+	--json-extended \
 	--out-skey stake.skey \
 	--out-vkey stake.vkey
 ```
 This generates the typical .skey/.vkey files with content like
 ``` json
 {
-      "type": "StakeExtendedSigningKeyShelley_ed25519_bip32",
-      "description": "Stake Signing Key",
-      "cborHex": "5840f0a67a2da52bab4b8c937f8eaffff7471b9e90cd14c22c4354d25dece70e54503b3ecc59893bd937ee43df012c254b643a41ebd0ef13ae5ef3e691ac7bc2b634"
+  "type": "StakeExtendedSigningKeyShelley_ed25519_bip32",
+  "description": "Stake Signing Key",
+  "cborHex": "5880f0e78e6c657812e10359bce03c14dda79cd27748571e153f477f0eeca741f049022fe2e261bbda8bcedb96b3ec82eb994b80a739ad0e06fe560f59ae8df50bbea74b785851b0d36b8add6dc24d94112fe18e9fa4e60cc0e420002f77b5ce81482632a8abbe24b57b25912eea26ba686786ea45d4c08d67a8c1207ac219467a82"
 }
 ```
 ``` json
 {
-      "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32",
-      "description": "Stake Verification Key",
-      "cborHex": "58205a99e2dbbbb23fdae6af97b7a540b70dc68cde49e816c632accfbb5533bebdf5"
+  "type": "StakeVerificationKeyShelley_ed25519",
+  "description": "Stake Verification Key",
+  "cborHex": "5820a74b785851b0d36b8add6dc24d94112fe18e9fa4e60cc0e420002f77b5ce8148"
 }
 ```
 
@@ -922,24 +924,24 @@ Output - JSON Format:
 {
   "workMode": "keygen-cip36",
   "path": "1694H/1815H/0H/0/0",
-  "mnemonics": "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair",
-  "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8",
-  "publicKey": "8f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea",
-  "XpubKeyHex": "81d2f04ba976badf5f83711c904898f26f08c64de2185b3fb3c46fdb7f37bae4e093e35996924a30f98a169d862f57b248cb95eb77ba50ce4d24b76c1859e21a",
-  "XpubKeyBech": "xpub1s8f0qjafw6ad7hurwywfqjyc7fhs33jdugv9k0anc3haklehhtjwpylrtxtfyj3slx9pd8vx9atmyjxtjh4h0wjseexjfdmvrpv7yxsku9k6z",
   "votePurpose": "Catalyst (0)",
-  "secretKeyBech": "cvote_sk1zpkptpr5ha7vvd9agd5vd8vr5rvexramsqm0fyzmamrmt7pwv4r66zygwyt6lf78ldzjaqcurs2h65ck3dwv7235n9jysklgwltfe7q0y0yjp",
-  "publicKeyBech": "cvote_vk13uwp8z56rkw9fsugs8xag6h2776qnsk6kvx3dq6yjdxng2v6dh4qtskqms",
+  "mnemonics": "sudden release husband tone know ladder couple timber another human horn humble exit gift depth green aspect annual crawl final garage innocent cluster aisle",
+  "secretKey": "38483eb792e0e4daa12a317ffdeaddd72b3dfde549ee174ecaabf14173bb315dbe3f42605e7400f1616a73a4c08b7f6a89d3e3da87adab9c5e8571bc58bf32d336fdc791592d144da05165c89323c98078d4a888bf4d6e4e146192493d23a065e31ab5741b2180735bd168d2d1a0911e874beb32651f7519733444f3df8bc956",
+  "publicKey": "36fdc791592d144da05165c89323c98078d4a888bf4d6e4e146192493d23a065",
+  "XpubKeyHex": "792ca6f66a4a37769e24de762b4a79a1b4340c5f5388b9e9fc3ad16f63a1188f766b14cd0d5d5bcd2f8c7bdaef983b7539b24911d92c136ef54d78aa61b564c8",
+  "XpubKeyBech": "xpub10yk2dan2fgmhd83ymemzkjne5x6rgrzl2wytn60u8tgk7caprz8hv6c5e5x46k7d97x8hkh0nqah2wdjfygajtqndm656792vx6kfjqr7hegx",
+  "secretKeyBech": "cvote_sk18pyradujurjd4gf2x9llm6ka6u4nml09f8hpwnk240c5zuamx9wmu06zvp08gq83v9488fxq3dlk4zwnu0dg0tdtn30g2udutzln95eklhrezkfdz3x6q5t9ezfj8jvq0r223z9lf4hyu9rpjfyn6gaqvh334dt5rvscqu6m695d95dqjy0gwjltxfj37agewv6yfu7l30y4v0wn82x",
+  "publicKeyBech": "cvote_vk1xm7u0y2e952ymgz3vhyfxg7fspudf2yghaxkuns5vxfyj0fr5pjss26uda",
   "output": {
     "skey": {
       "type": "CIP36VoteExtendedSigningKey_ed25519",
-      "description": "Catalyst Vote Signing Key",
-      "cborHex": "5840106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8"
+      "description": "undefined Vote Signing Key",
+      "cborHex": "588038483eb792e0e4daa12a317ffdeaddd72b3dfde549ee174ecaabf14173bb315dbe3f42605e7400f1616a73a4c08b7f6a89d3e3da87adab9c5e8571bc58bf32d336fdc791592d144da05165c89323c98078d4a888bf4d6e4e146192493d23a065e31ab5741b2180735bd168d2d1a0911e874beb32651f7519733444f3df8bc956"
     },
     "vkey": {
       "type": "CIP36VoteVerificationKey_ed25519",
-      "description": "Catalyst Vote Verification Key",
-      "cborHex": "58208f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea"
+      "description": "undefined Vote Verification Key",
+      "cborHex": "582036fdc791592d144da05165c89323c98078d4a888bf4d6e4e146192493d23a065"
     }
   }
 }
@@ -964,25 +966,25 @@ cardano-signer keygen \
 Output - JSON Format:
 ``` json
 {
-  "workMode": "keygen-cip36",
+  "workMode": "keygen",
   "path": "1694H/1815H/0H/0/0",
+  "votePurpose": "Catalyst (0)",
   "mnemonics": "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair",
-  "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8",
+  "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf88f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea5744838cd3d3916f0cda808bb91f512162cc58be3ca9b87cb4b69db7e5558861",
   "publicKey": "8f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea",
   "XpubKeyHex": "81d2f04ba976badf5f83711c904898f26f08c64de2185b3fb3c46fdb7f37bae4e093e35996924a30f98a169d862f57b248cb95eb77ba50ce4d24b76c1859e21a",
   "XpubKeyBech": "xpub1s8f0qjafw6ad7hurwywfqjyc7fhs33jdugv9k0anc3haklehhtjwpylrtxtfyj3slx9pd8vx9atmyjxtjh4h0wjseexjfdmvrpv7yxsku9k6z",
-  "votePurpose": "Catalyst (0)",
-  "secretKeyBech": "cvote_sk1zpkptpr5ha7vvd9agd5vd8vr5rvexramsqm0fyzmamrmt7pwv4r66zygwyt6lf78ldzjaqcurs2h65ck3dwv7235n9jysklgwltfe7q0y0yjp",
+  "secretKeyBech": "cvote_sk1zpkptpr5ha7vvd9agd5vd8vr5rvexramsqm0fyzmamrmt7pwv4r66zygwyt6lf78ldzjaqcurs2h65ck3dwv7235n9jysklgwltfe7y0rsfc4xsan32v8zypeh2x46hhksyu9k4np5tgx3ynf56znxndaft5fquv60fezmcvm2qghwgl2ysk9nzchc72nwrukjmfmdl92kyxzczy5xl",
   "publicKeyBech": "cvote_vk13uwp8z56rkw9fsugs8xag6h2776qnsk6kvx3dq6yjdxng2v6dh4qtskqms",
   "output": {
     "skey": {
       "type": "CIP36VoteExtendedSigningKey_ed25519",
-      "description": "Catalyst Vote Signing Key",
-      "cborHex": "5840106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf8"
+      "description": "undefined Vote Signing Key",
+      "cborHex": "5880106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf88f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea5744838cd3d3916f0cda808bb91f512162cc58be3ca9b87cb4b69db7e5558861"
     },
     "vkey": {
       "type": "CIP36VoteVerificationKey_ed25519",
-      "description": "Catalyst Vote Verification Key",
+      "description": "undefined Vote Verification Key",
       "cborHex": "58208f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea"
     }
   }
@@ -991,11 +993,108 @@ Output - JSON Format:
 If you provide mnemonics via the `--mnemonics` parameter, these mnemonics will be used to derive the keys from. So you can also for example convert your Daedalus Wallet into .skey/.vkey files.
 <br>
 
+## *dRep keys without/with mnemonics*
+
+### Generate a keypair from the dRep specific path 1852H/1815H/0H/3/0 without mnemonics
+``` console
+cardano-signer keygen \
+	--path drep \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen",
+  "path": "1852H/1815H/0H/3/0",
+  "mnemonics": "spirit poverty boring zero banner argue cream bag damage menu purity project scatter harsh moment exit tribe security autumn bar olive defy slight mirror",
+  "secretKey": "00ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
+  "publicKey": "395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af",
+  "XpubKeyHex": "a91179e1ab2f8b7866f27a298b8004aab4981739b106fbf96b877bde63a400fe02bb92856c70bffb4389b815e64cafda1a14b447489324153d1075fdd8ea051d",
+  "XpubKeyBech": "xpub14yghncdt979hsehj0g5chqqy426fs9eekyr0h7ttsaaaucayqrlq9wujs4k8p0lmgwyms90xfjha5xs5k3r53yeyz573qa0amr4q28g9pgywh",
+  "drepIdHex": "f05f78a15b2db995bee537ce2e8220c068c5be44422eed27e129ac71",
+  "drepIdBech": "drep17p0h3g2m9kuet0h9xl8zaq3qcp5vt0jygghw6flp9xk8z7cz8zm",
+  "secretKeyBech": "drep_sk1qrlkqycjvp6vnnagz8pm0lszeykepdl2kjghqecy8wplzx5ula92k3hysv5zupvtscn2y9zpcvmmycfy6ttvm7dd3nusa5te5ax98qfe2wf27gqq9txdz099unlpscyg96lz7lmndacqfcu4ztlty5jp470wv7zpqkflhxss6y8jrvvy2agzh76h35tg4naeha6p3fnzhutm6jmxnf3",
+  "publicKeyBech": "drep_vk189fe9teqqq4ve5fu5hj0uxrq3qhtutmlwdhhqp8rj5f0avjjgxhsu2h6h8",
+  "output": {
+    "skey": {
+      "type": "DRepExtendedSigningKey_ed25519_bip32",
+      "description": "Delegate Representative Signing Key",
+      "cborHex": "588000ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd"
+    },
+    "vkey": {
+      "type": "DRepVerificationKey_ed25519",
+      "description": "Delegate Representative Verification Key",
+      "cborHex": "5820395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af"
+    }
+  }
+}
+```
+As you can see, the path is recognized as a dRep Signing/Verification key path.
+
+You can achieve the same result by setting `--path 1852H/1815H/0H/3/0`.
+
+Like with the examples before, you can write out .skey/.vkey files if needed.
+
+Such a generated key can be used to registere it on chain as your dRep key. You can also use the generated mnemonics to create a new wallet on a LightWallet like Eternl, if you like to have your keys synced.
+
+<br>
+
+### Generate a keypair with given mnemonics and with an extended verification key as an example
+``` console
+cardano-signer keygen \
+	--path 1852H/1815H/0H/3/0 \
+	--mnemonics "spirit poverty boring zero banner argue cream bag damage menu purity project scatter harsh moment exit tribe security autumn bar olive defy slight mirror" \
+	--vkey-extended
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen",
+  "path": "1852H/1815H/0H/3/0",
+  "mnemonics": "spirit poverty boring zero banner argue cream bag damage menu purity project scatter harsh moment exit tribe security autumn bar olive defy slight mirror",
+  "secretKey": "00ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
+  "publicKey": "395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
+  "XpubKeyHex": "a91179e1ab2f8b7866f27a298b8004aab4981739b106fbf96b877bde63a400fe02bb92856c70bffb4389b815e64cafda1a14b447489324153d1075fdd8ea051d",
+  "XpubKeyBech": "xpub14yghncdt979hsehj0g5chqqy426fs9eekyr0h7ttsaaaucayqrlq9wujs4k8p0lmgwyms90xfjha5xs5k3r53yeyz573qa0amr4q28g9pgywh",
+  "drepIdHex": "1d40bb22a16442babf911c345736c4d4e07fcc3b3444690785764141",
+  "drepIdBech": "drep1r4qtkg4pv3pt40u3rs69wdky6ns8lnpmx3zxjpu9weq5z68dgyg",
+  "secretKeyBech": "drep_sk1qrlkqycjvp6vnnagz8pm0lszeykepdl2kjghqecy8wplzx5ula92k3hysv5zupvtscn2y9zpcvmmycfy6ttvm7dd3nusa5te5ax98qfe2wf27gqq9txdz099unlpscyg96lz7lmndacqfcu4ztlty5jp470wv7zpqkflhxss6y8jrvvy2agzh76h35tg4naeha6p3fnzhutm6jmxnf3",
+  "publicKeyBech": "drep_vk189fe9teqqq4ve5fu5hj0uxrq3qhtutmlwdhhqp8rj5f0avjjgxheaencgyze87u6zrgs7gd3s3t4q2lm27x3dzk0hxlhgx9xv2l300gge7d87",
+  "output": {
+    "skey": {
+      "type": "DRepExtendedSigningKey_ed25519_bip32",
+      "description": "Delegate Representative Signing Key",
+      "cborHex": "588000ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd"
+    },
+    "vkey": {
+      "type": "DRepExtendedVerificationKey_ed25519_bip32",
+      "description": "Delegate Representative Verification Key",
+      "cborHex": "5840395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd"
+    }
+  }
+}
+```
+If you provide mnemonics via the `--mnemonics` parameter, these mnemonics will be used to derive the keys from. So you can also for example convert your LightWallet (Eternl, Typhon, ...) into .skey/.vkey files.
+<br>
 
 <br>
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.14.0**
+  #### New dRep-Key generation mode:
+	- generate conway dRep keys via the path `--path drep` or
+ 	- generate conway dRep keys from the derivation path `1852'/1815'/acc'/3/idx'`
+  	- generate conway dRep keys from mnemonics or let cardano-signer generate new mnemonics for you
+
+  #### Key generation mode changes:
+  	- the flag `with-chain-code` has been replaced by the new flag `vkey-extended`. this makes it easier for the users to understand the meaning
+  	- per default the public keys are now always generated as non-extended keys, the secret keys are always extended ones if derived from a path
+
+  #### General
+  	- code cleanup
 
 * **1.13.0**
   #### New key generation mode:
