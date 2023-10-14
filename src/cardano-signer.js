@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.13.0"
+const version = "1.14.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -17,9 +17,9 @@ const crypto = require('crypto'); //used for crypto functions like entropy gener
 const parse_options = {
 	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key', 'mnemonics', 'path'],
 	number: ['nonce', 'vote-weight', 'vote-purpose'],
-	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload', 'with-chain-code'], //all booleans are set to false per default
+	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload', 'vkey-extended'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics' }
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' }
 };
 const args = require('minimist')(process.argv.slice(2),parse_options);
 
@@ -138,11 +138,11 @@ switch (topic) {
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}keygen${Reset}`);
 		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
-		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36${Reset}`);
+		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep${Reset}`);
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
-		console.log(`           [${FgGreen}--with-chain-code${Reset}] 					${Dim}optional flag to generate a 128byte secretKey and 64byte publicKey with chain code${Reset}`);
+		console.log(`           [${FgGreen}--vkey-extended${Reset}] 					${Dim}optional flag to generate a 64byte publicKey with chain code${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 		console.log(`           [${FgGreen}--out-skey${Reset} "<path_to_skey_file>"]			${Dim}path to an output skey-file${Reset}`);
@@ -1275,7 +1275,7 @@ async function main() {
                 case "keygen-cip36":
 
 			//setup
-			var XpubKeyHex = '', XpubKeyBech = ''; vote_purpose = 0;
+			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '', prvKeyBech = '', pubKeyBech = '';
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1287,6 +1287,7 @@ async function main() {
 					case 'PAYMENT': derivation_path = '1852H/1815H/0H/0/0'; break;
 					case 'STAKE': derivation_path = '1852H/1815H/0H/2/0'; break;
 					case 'CIP36': derivation_path = '1694H/1815H/0H/0/0'; break;
+					case 'DREP': derivation_path = '1852H/1815H/0H/3/0'; break;
 				}
 
 				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
@@ -1297,21 +1298,8 @@ async function main() {
 
 
 			//load or overwrite derivation path if CIP36 vote keys are selected
-			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0'
+			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0' }
 
-				//get the --vote-purpose parameter, set default = 0
-				var vote_purpose_param = args['vote-purpose'];
-			        if ( typeof vote_purpose_param === 'undefined' ) { vote_purpose = 0 }  //if not defined, set it to default=0
-			        else if ( typeof vote_purpose_param === 'number' && vote_purpose_param >= 0 ) { vote_purpose = vote_purpose_param }
-				else { console.error(`Error: Please specify a --vote-purpose parameter with an unsigned integer value >= 0`); process.exit(1); }
-
-			}
-
-			//get a cleartext description of the purpose (shown in the --json-extended output)
-			switch (vote_purpose) {
-				case 0: var vote_purpose_description="Catalyst"; break;
-				default: var vote_purpose_description="Unknown";
-			}
 
 			//get mnemonics parameter, if ok set the mnemonics variable
 			var mnemonics = args['mnemonics'];
@@ -1370,12 +1358,15 @@ async function main() {
 					}
 				});
 
-				//if the extra flag 'with-chain-code' is set, generate a 128byte private key and a 64byte public key. otherwise generate a 64byte private key and 32byte public key
-				if ( args['with-chain-code'] === true ) {
-					var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+
+				//if derived, we always have an extended private secret key
+				var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+				//var prvKeyHex = Buffer.from(rootKey.to_raw_key().as_bytes()).toString('hex'); //private-secret key in hex format (64bytes) - not used here because its always an extended one
+
+				//if the extra flag 'vkey-extended' is set, generate a 64byte public key. otherwise generate a 32byte public key
+				if ( args['vkey-extended'] === true ) {
 					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //public key in hex format (64bytes)
 				} else {
-					var prvKeyHex = Buffer.from(rootKey.to_raw_key().as_bytes()).toString('hex'); //private-secret key in hex format (64bytes)
 					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex').substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
 				}
 
@@ -1385,36 +1376,99 @@ async function main() {
 			var prvKeyCbor = cbor.encode(Buffer.from(prvKeyHex,'hex')).toString('hex')
 			var pubKeyCbor = cbor.encode(Buffer.from(pubKeyHex,'hex')).toString('hex')
 
-			//generate the content of the skey/vkey files
-			if ( derivation_path == '' ) { //simple ed25519 keys
 
-				var skeyContent = `{ "type": "PaymentSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
-				var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+			//generate the content depending on the derivation path
+			switch (derivation_path.substring(0,11)) {
 
-			} else if ( derivation_path.substring(0,11) == '1694H/1815H' ) { //CIP36 voting keys
+				case '': //simple ed25519 keys
 
-				var skeyContent = `{ "type": "CIP36VoteExtendedSigningKey_ed25519", "description": "${vote_purpose_description} Vote Signing Key", "cborHex": "${prvKeyCbor}" }`;
-				if ( args['with-chain-code'] === true ) {
-					var vkeyContent = `{ "type": "CIP36VoteExtendedVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
-				} else {
-					var vkeyContent = `{ "type": "CIP36VoteVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
-				}
+					var skeyContent = `{ "type": "PaymentSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					break;
 
-			} else if ( derivation_path.substring(0,11) == '1852H/1815H' ) { //Extended Payment/Staking keys
 
-				//check if purpose is a stake key
-				if ( derivation_path.split('/')[3] == '2' ) {
-					var skeyContent = `{ "type": "StakeExtendedSigningKeyShelley_ed25519_bip32", "description": "Stake Signing Key", "cborHex": "${prvKeyCbor}" }`;
-					var vkeyContent = `{ "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32", "description": "Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
-				} else { //looks like a payment key
-					var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
-					var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
-				}
+				case '1694H/1815H': //CIP36 voting keys
 
-			} else { //generic ones
+					var skeyContent = `{ "type": "CIP36VoteExtendedSigningKey_ed25519", "description": "${vote_purpose_description} Vote Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					if ( args['vkey-extended'] === true ) {
+						var vkeyContent = `{ "type": "CIP36VoteExtendedVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					} else {
+						var vkeyContent = `{ "type": "CIP36VoteVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					}
+					//generate the keys also in bech format
+					var prvKeyBech = bech32.encode("cvote_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+					var pubKeyBech = bech32.encode("cvote_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+
+					//get the --vote-purpose parameter, set default = 0
+					var vote_purpose_param = args['vote-purpose'];
+				        if ( typeof vote_purpose_param === 'undefined' ) { vote_purpose = 0 }  //if not defined, set it to default=0
+				        else if ( typeof vote_purpose_param === 'number' && vote_purpose_param >= 0 ) { vote_purpose = vote_purpose_param }
+					else { console.error(`Error: Please specify a --vote-purpose parameter with an unsigned integer value >= 0`); process.exit(1); }
+
+					//get a cleartext description of the purpose (shown in the --json-extended output)
+					switch (vote_purpose) {
+						case 0: var vote_purpose_description="Catalyst"; break;
+						default: var vote_purpose_description="Unknown";
+					}
+					break;
+
+
+				case '1852H/1815H': //Extended Payment/Staking keys and also Drep keys
+
+					//generate different key outputs depending on the path number field 4 (idx=3) 1H/2H/3H/4/5
+					switch (derivation_path.split('/')[3]) {
+
+						case '2': //path is a stake key
+
+							var skeyContent = `{ "type": "StakeExtendedSigningKeyShelley_ed25519_bip32", "description": "Stake Signing Key", "cborHex": "${prvKeyCbor}" }`;
+
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32", "description": "Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							} else {
+								var vkeyContent = `{ "type": "StakeVerificationKeyShelley_ed25519", "description": "Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							}
+							break;
+
+
+						case '3': //path is a drep key
+
+							var skeyContent = `{ "type": "DRepExtendedSigningKey_ed25519_bip32", "description": "Delegate Representative Signing Key", "cborHex": "${prvKeyCbor}" }`;
+
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "DRepExtendedVerificationKey_ed25519_bip32", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							} else {
+								var vkeyContent = `{ "type": "DRepVerificationKey_ed25519", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							}
+
+							//also generate the drep id in hex and bech format
+							var drepIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+							var drepIdBech = bech32.encode("drep", bech32.toWords(Buffer.from(drepIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+							//generate the keys also in bech format
+							var prvKeyBech = bech32.encode("drep_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+							var pubKeyBech = bech32.encode("drep_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							break;
+
+
+						default: //looks like a payment key
+							var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							} else {
+								var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+							}
+
+
+					} //switch (derivation_path.split('/')[3])
+					break;
+
+
+				default: //generic ones
+
 					var skeyContent = `{ "type": "ExtendedSigningKeyShelley_ed25519_bip32", "description": "Signing Key", "cborHex": "${prvKeyCbor}" }`;
 					var vkeyContent = `{ "type": "ExtendedVerificationKeyShelley_ed25519_bip32", "description": "Verification Key", "cborHex": "${pubKeyCbor}" }`;
-			}
+
+			} //switch (derivation_path.substring(0,11))
 
 
 			//compose the content for the output as JSON, extended JSON data or plain hex
@@ -1423,15 +1477,12 @@ async function main() {
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var content = `{ "workMode": "${workMode}"`
 				if ( derivation_path != '' ) { content += `, "path": "${derivation_path}"`; }
+				if ( vote_purpose > -1 ) { content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`; }
 				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
-				if ( args['cip36'] === true ) {
-					content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`;
-					prvKeyBech = bech32.encode("cvote_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
-					pubKeyBech = bech32.encode("cvote_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
-				content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`;
-				}
+				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}"`; }
+				if ( prvKeyBech != '' ) { content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`; }
 				content += `, "output": { "skey": ${skeyContent}, "vkey": ${vkeyContent} } }`
 			} else { //generate content in text format
 				var content = `${prvKeyHex} ${pubKeyHex}`;
