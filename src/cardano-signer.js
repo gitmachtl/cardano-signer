@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.14.0"
+const version = "1.15.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -15,13 +15,21 @@ const crypto = require('crypto'); //used for crypto functions like entropy gener
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'cose-sign1', 'cose-key', 'mnemonics', 'path'],
-	number: ['nonce', 'vote-weight', 'vote-purpose'],
-	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'bech', 'hashed', 'nopayload', 'vkey-extended'], //all booleans are set to false per default
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic'],
+	boolean: ['json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' }
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
+	unknown: function(unknownParameter) {
+			const numberParams = ['nonce', 'vote-weight', 'vote-purpose']; //these are parameter which specifies numbers, so they are not in the lists above, we only throw an error if the unknownParameter is not in this list
+			if ( ! numberParams.includes(unknownParameter.substring(2).toLowerCase()) ) { //throw an error if given parameterName is not in any of the lists above
+				process.stderr.write(`Error: Unknown parameter '${unknownParameter}'`);
+				if ( ! unknownParameter.startsWith('--') ) { process.stderr.write(` - parameters must start with a double hypen like --secret-key`); }
+				process.stderr.write(`\n`);
+				process.exit(1);
+				}
+			}
 };
-const args = require('minimist')(process.argv.slice(2),parse_options);
+const args = require('minimist')(process.argv.slice(3),parse_options); //slice(3) because we always have the workMode like 'keygen,sign,verify' at pos 2, so we start to look for arguments at pos 3
 
 //various constants
 const regExpHex = /^[0-9a-fA-F]+$/;
@@ -138,7 +146,7 @@ switch (topic) {
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}keygen${Reset}`);
 		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
-		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep${Reset}`);
+		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot${Reset}`);
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
@@ -211,8 +219,8 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 			// try to use the parameter as a filename for a cardano skey json with a cborHex entry
 			try {
 				const key_json = JSON.parse(fs.readFileSync(key,'utf8')); //parse the given key as a json file
-				const is_singing_key = key_json.type.toLowerCase().includes('signing') //boolean if the json contains the keyword 'signing' in the type field
-				if ( ! is_singing_key ) { console.error(`Error: The file '${key}' is not a signing/secret key json`); process.exit(1); }
+				const is_signing_key = key_json.type.toLowerCase().includes('signing') //boolean if the json contains the keyword 'signing' in the type field
+				if ( ! is_signing_key ) { console.error(`Error: The file '${key}' is not a signing/secret key json`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
 				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The secret key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
@@ -1275,7 +1283,7 @@ async function main() {
                 case "keygen-cip36":
 
 			//setup
-			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '', prvKeyBech = '', pubKeyBech = '';
+			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '', ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '', prvKeyBech = '', pubKeyBech = '';
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1288,6 +1296,8 @@ async function main() {
 					case 'STAKE': derivation_path = '1852H/1815H/0H/2/0'; break;
 					case 'CIP36': derivation_path = '1694H/1815H/0H/0/0'; break;
 					case 'DREP': derivation_path = '1852H/1815H/0H/3/0'; break;
+					case 'CC-COLD': derivation_path = '1852H/1815H/0H/4/0'; break;
+					case 'CC-HOT': derivation_path = '1852H/1815H/0H/5/0'; break;
 				}
 
 				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
@@ -1432,20 +1442,65 @@ async function main() {
 
 						case '3': //path is a drep key
 
+							//generate the secret/private key formats
 							var skeyContent = `{ "type": "DRepExtendedSigningKey_ed25519_bip32", "description": "Delegate Representative Signing Key", "cborHex": "${prvKeyCbor}" }`;
-
-							if ( args['vkey-extended'] === true ) {
-								var vkeyContent = `{ "type": "DRepExtendedVerificationKey_ed25519_bip32", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
-							} else {
-								var vkeyContent = `{ "type": "DRepVerificationKey_ed25519", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
-							}
+							var prvKeyBech = bech32.encode("drep_xsk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
 
 							//also generate the drep id in hex and bech format
 							var drepIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 							var drepIdBech = bech32.encode("drep", bech32.toWords(Buffer.from(drepIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
-							//generate the keys also in bech format
-							var prvKeyBech = bech32.encode("drep_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
-							var pubKeyBech = bech32.encode("drep_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+
+							//generate the public key formats
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "DRepExtendedVerificationKey_ed25519_bip32", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("drep_xvk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							} else {
+								var vkeyContent = `{ "type": "DRepVerificationKey_ed25519", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("drep_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							}
+
+							break;
+
+
+						case '4': //path is a constitutional committee cold key
+
+							//generate the secret/private key formats
+							var skeyContent = `{ "type": "ConstitutionalCommitteeColdExtendedSigningKey_ed25519_bip32", "description": "Constitutional Committee Cold Extended Signing Key", "cborHex": "${prvKeyCbor}" }`;
+							var prvKeyBech = bech32.encode("cc_cold_xsk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+
+							//also generate the cc id in hex and bech format
+							var ccColdIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+							var ccColdIdBech = bech32.encode("cc_cold", bech32.toWords(Buffer.from(ccColdIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "ConstitutionalCommitteeColdExtendedVerificationKey_ed25519_bip32", "description": "Constitutional Committee Cold Extended Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("cc_cold_xvk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							} else {
+								var vkeyContent = `{ "type": "ConstitutionalCommitteeColdVerificationKey_ed25519", "description": "Constitutional Committee Cold Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("cc_cold_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							}
+
+							break;
+
+
+						case '5': //path is a constitutional committee hot key
+
+							//generate the secret/private key formats
+							var skeyContent = `{ "type": "ConstitutionalCommitteeHotExtendedSigningKey_ed25519_bip32", "description": "Constitutional Committee Hot Extended Signing Key", "cborHex": "${prvKeyCbor}" }`;
+							var prvKeyBech = bech32.encode("cc_hot_xsk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+
+							//also generate the cc id in hex and bech format
+							var ccHotIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+							var ccHotIdBech = bech32.encode("cc_hot", bech32.toWords(Buffer.from(ccHotIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
+							if ( args['vkey-extended'] === true ) {
+								var vkeyContent = `{ "type": "ConstitutionalCommitteeHotExtendedVerificationKey_ed25519_bip32", "description": "Constitutional Committee Hot Extended Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("cc_hot_xvk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							} else {
+								var vkeyContent = `{ "type": "ConstitutionalCommitteeHotVerificationKey_ed25519", "description": "Constitutional Committee Hot Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var pubKeyBech = bech32.encode("cc_hot_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+							}
+
 							break;
 
 
@@ -1482,6 +1537,8 @@ async function main() {
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
 				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}"`; }
+				else if ( ccColdIdHex != '' ) { content += `, "ccColdIdHex": "${ccColdIdHex}", "ccColdIdBech": "${ccColdIdBech}"`; }
+				else if ( ccHotIdHex != '' ) { content += `, "ccHotIdHex": "${ccHotIdHex}", "ccHotIdBech": "${ccHotIdBech}"`; }
 				if ( prvKeyBech != '' ) { content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`; }
 				content += `, "output": { "skey": ${skeyContent}, "vkey": ${vkeyContent} } }`
 			} else { //generate content in text format
