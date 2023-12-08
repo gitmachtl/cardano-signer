@@ -781,7 +781,7 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 # KeyGeneration mode
 
-![image](https://github.com/gitmachtl/cardano-signer/assets/47434720/dcc0119f-cab5-4645-a439-35aeedc27e29)
+![image](https://github.com/gitmachtl/cardano-signer/assets/47434720/5452fc14-b067-4006-af94-bc6589a1ba49)
 
 ## *Normal ed25519 keypair without derivation-path/mnemonics*
 
@@ -1173,6 +1173,11 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.15.1**
+  #### General
+	- small bugfix, parameters `help`, `usage`, `version` throwing an "unknown" error
+
 
 * **1.15.0**
   #### New constitutional-commitee-member cold-key generation mode:
