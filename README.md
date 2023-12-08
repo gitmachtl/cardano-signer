@@ -9,7 +9,7 @@
 * Sign payloads in **CIP-8 / CIP-30** mode, hashed or not hashed, with or without a payload in the output. The signing output is a COSE_Sign1 signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 * Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
-* Generate conway **dRep Keys** with or without **mnemonic words**.
+* Generate conway **dRep Keys, Constitutional Commitee Member Cold/Hot Keys** with or without **mnemonic words**.
 * Generate CIP36 voting-keys.
 * A given address will automatically be checked against the used publicKey.
 
@@ -1035,7 +1035,7 @@ You can achieve the same result by setting `--path 1852H/1815H/0H/3/0`.
 
 Like with the examples before, you can write out .skey/.vkey files if needed.
 
-Such a generated key can be used to registere it on chain as your dRep key. You can also use the generated mnemonics to create a new wallet on a LightWallet like Eternl, if you like to have your keys synced.
+Such a generated key can be used to register it on chain as your dRep key. You can also use the generated mnemonics to create a new wallet on a LightWallet like Eternl, if you like to have your keys synced.
 
 <br>
 
@@ -1078,10 +1078,117 @@ Output - JSON Format:
 If you provide mnemonics via the `--mnemonics` parameter, these mnemonics will be used to derive the keys from. So you can also for example convert your LightWallet (Eternl, Typhon, ...) into .skey/.vkey files.
 <br>
 
+## *Constitutional Commitee Member Cold/Hot keys*
+
+### Generate a CC-Cold keypair from the specific path 1852H/1815H/0H/4/0
+``` console
+cardano-signer keygen \
+	--path cc-cold \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen",
+  "path": "1852H/1815H/0H/4/0",
+  "mnemonics": "cotton thunder useful social state soft engage member rent subject kite earn forget robot coral depart future betray seed bag acquire enlist time primary",
+  "secretKey": "f07d70ee6fe6319bc265256077570a59b715312cf3c268547b7c4da966bc9e5568a67ca09e0f2ccbbbdd4b7c8563bb2e51529da43f2b77fe6db02371aa6dfba168c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093addcc291d29055a5407e99dcfce83436cf9369a09919bf5e653c680b6b418159",
+  "publicKey": "68c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093",
+  "XpubKeyHex": "6a86bb2d7eed40af0fc6bc96bb22cfdfac484570fbf20720e9af467418c12e13abe8b00e84b388298548608477c6ab410ab98582e2457faaf9642e7edcb191fc",
+  "XpubKeyBech": "xpub1d2rtktt7a4q27r7xhjttkgk0m7kys3tsl0eqwg8f4ar8gxxp9cf6h69sp6zt8zpfs4yxpprhc645zz4eskpwy3tl4tukgtn7mjcerlq6h05gk",
+  "ccColdIdHex": "12de8a19ab0a95aafdb881bf4bdfb092207e89ec2fa0c43be73dbcf1",
+  "ccColdIdBech": "cc_cold1zt0g5xdtp2264ldcsxl5hhasjgs8az0v97svgwl88k70zezc2s3",
+  "secretKeyBech": "cc_cold_xsk17p7hpmn0uccehsn9y4s8w4c2txm32vfv70pxs4rm03x6je4une2k3fnu5z0q7txth0w5kly9vwaju52jnkjr72mhlekmqgm34fklhgtgcrwl0c50fggxpkek0cdnajxur73vdmhze85j57j97r6dqf4sjwkaes5362g9tf2q06vael8gxsmvlymf5zv3n067v57xszmtgxq4j9q305j",
+  "publicKeyBech": "cc_cold_vk1drqdmalz3a9pqcxmxelpk0kgms0693hwuty7j2n6ghc0f5pxkzfsul89qx",
+  "output": {
+    "skey": {
+      "type": "ConstitutionalCommitteeColdExtendedSigningKey_ed25519_bip32",
+      "description": "Constitutional Committee Cold Extended Signing Key",
+      "cborHex": "5880f07d70ee6fe6319bc265256077570a59b715312cf3c268547b7c4da966bc9e5568a67ca09e0f2ccbbbdd4b7c8563bb2e51529da43f2b77fe6db02371aa6dfba168c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093addcc291d29055a5407e99dcfce83436cf9369a09919bf5e653c680b6b418159"
+    },
+    "vkey": {
+      "type": "ConstitutionalCommitteeColdVerificationKey_ed25519",
+      "description": "Constitutional Committee Cold Verification Key",
+      "cborHex": "582068c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093"
+    }
+  }
+}
+```
+As you can see, the path is recognized as a CC-Cold Signing/Verification key path.
+
+You can achieve the same result by setting `--path 1852H/1815H/0H/4/0`.
+
+Like with the examples before, you can directly also write out .skey/.vkey files if needed.
+
+**If you wanna use your own mnemonics, just provide them via the `--mnemonics` parameter!**
+
+<br>
+
+### Generate a CC-Hot keypair from the specific path 1852H/1815H/0H/5/0
+``` console
+cardano-signer keygen \
+	--path cc-hot \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen",
+  "path": "1852H/1815H/0H/5/0",
+  "mnemonics": "knock advance olympic table pride melody cause kick govern pass manual liberty warfare zero now meat confirm chronic amount powder three limb patient ball",
+  "secretKey": "401299d0380dec82d938092673de937c634338976bd246b86b9ddcd69838b654b87c0afa9d08df7bbfec137e8b2f98e48de0c01225f7b278b37efad1dfbbaefc344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a093bca3010d9dadba7489f0f5ec9a7a43239b06326e9fbb3d7685ecf719b90738",
+  "publicKey": "344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a0",
+  "XpubKeyHex": "7da8b212c1a0364f2fd08707f8e132a07d67c3e86e50e8f243ba8688403011bd3adfe9de3beed77354ca01887337a3779783250e20d2705a40d930d45220f6cb",
+  "XpubKeyBech": "xpub10k5tyykp5qmy7t7ssurl3cfj5p7k0slgdegw3ujrh2rgsspszx7n4hlfmca7a4mn2n9qrzrnx73h09ury58zp5nstfqdjvx52gs0djcpqjpv0",
+  "ccHotIdHex": "644d25e82ba444e6bc4f6141968f5f626ac26669d9952f682cdbc90f",
+  "ccHotIdBech": "cc_hot1v3xjt6pt53zwd0z0v9qedr6lvf4vyenfmx2j76pvm0ys7qcljwa",
+  "secretKeyBech": "cc_hot_xsk1gqffn5pcphkg9kfcpyn88h5n0335xwyhd0fydwrtnhwddxpcke2tslq2l2ws3hmmhlkpxl5t97vwfr0qcqfztaaj0zeha7k3m7a6alp5fm8xwl2fx82evggfzlrm5cf9kcjnm4zrrgxgscmf24frtuu95zfmegcppkw6mwn538c0tmy60fpj8xcxxfhflweaw6z7eacehyrnsf69qu2",
+  "publicKeyBech": "cc_hot_vk1x38vuemafycat93ppytu0wnpykmz20w5gvdqezrrd924yd0nsksqah2clh",
+  "output": {
+    "skey": {
+      "type": "ConstitutionalCommitteeHotExtendedSigningKey_ed25519_bip32",
+      "description": "Constitutional Committee Hot Extended Signing Key",
+      "cborHex": "5880401299d0380dec82d938092673de937c634338976bd246b86b9ddcd69838b654b87c0afa9d08df7bbfec137e8b2f98e48de0c01225f7b278b37efad1dfbbaefc344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a093bca3010d9dadba7489f0f5ec9a7a43239b06326e9fbb3d7685ecf719b90738"
+    },
+    "vkey": {
+      "type": "ConstitutionalCommitteeHotVerificationKey_ed25519",
+      "description": "Constitutional Committee Hot Verification Key",
+      "cborHex": "5820344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a0"
+    }
+  }
+}
+```
+As you can see, the path is recognized as a CC-Hot Signing/Verification key path.
+
+You can achieve the same result by setting `--path 1852H/1815H/0H/5/0`.
+
+Like with the examples before, you can directly also write out .skey/.vkey files if needed.
+
+**If you wanna use your own mnemonics, just provide them via the `--mnemonics` parameter!**
+
+<br>
+
+
 <br>
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.15.0**
+  #### New constitutional-commitee-member cold-key generation mode:
+  	- generate conway cc-cold keys via the path `--path cc-cold` or
+  	- generate conway cc-cold keys from the derivation path "1852'/1815'/acc'/4/idx'
+  	- generate conway cc-cold keys from mnemonics or let cardano-signer generate new mnemonics for you
+
+  #### New constitutional-commitee-member hot-key generation mode:
+  	- generate conway cc-hot keys via the path `--path cc-hot` or
+  	- generate conway cc-hot keys from the derivation path "1852'/1815'/acc'/5/idx'
+  	- generate conway cc-hot keys from mnemonics or let cardano-signer generate new mnemonics for you
+
+  #### General
+  	- some corrections on extended verification key outputs
+  	- an unknown parameter now throws an error. before, optional parameters with a typo were simply ignored
+  	- general code cleanup, typos, etc.
 
 * **1.14.0**
   #### New dRep-Key generation mode:
