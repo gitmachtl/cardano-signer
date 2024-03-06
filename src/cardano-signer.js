@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.15.2"
+const version = "1.16.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -16,7 +16,7 @@ const crypto = require('crypto'); //used for crypto functions like entropy gener
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
 	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended'], //all booleans are set to false per default
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
@@ -74,6 +74,7 @@ switch (topic) {
 		console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 		console.log(`           ${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to an address-file or a direct bech/hex format 'stake1..., stake_test1..., addr1...'${Reset}`);
+		console.log(`           [${FgGreen}--nohashcheck${Reset}]					${Dim}optional flag to not perform a check that the public-key belongs to the address/hash${Reset}`);
 		console.log(`           [${FgGreen}--hashed${Reset}]						${Dim}optional flag to hash the payload given via the 'data' parameters${Reset}`);
 		console.log(`           [${FgGreen}--nopayload${Reset}]					${Dim}optional flag to exclude the payload from the COSE_Sign1 signature, default: included${Reset}`);
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
@@ -132,6 +133,7 @@ switch (topic) {
 		console.log(`           [${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}]`);
 		console.log(`								${Dim}optional data/payload/file if not present in the COSE_Sign1 signature${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional signing-address to do the verification with${Reset}`);
+		console.log(`           [${FgGreen}--nohashcheck${Reset}]					${Dim}optional flag to not perform a check that the public-key belongs to the address/hash${Reset}`);
 		console.log(`           [${FgGreen}--hashed${Reset}]						${Dim}optional flag to hash the payload given via the 'data' parameters${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -331,28 +333,38 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 
 	// we have a valid address in the addr_hex variable
 
-	// get the address type for information
-	switch (addr_hex.substring(0,1)) {
-		case '0': addr_type = 'payment base'; break;
-		case '1': addr_type = 'script base'; break;
-		case '2': addr_type = 'payment script'; break;
-		case '3': addr_type = 'script script'; break;
-		case '4': addr_type = 'payment pointer'; break;
-		case '5': addr_type = 'script pointer'; break;
-		case '6': addr_type = 'payment enterprise'; break;
-		case '7': addr_type = 'script'; break;
-		case 'e': addr_type = 'stake'; break;
-		case 'f': addr_type = 'stake script'; break;
-		default: addr_type = 'unknown';
-	}
 
-	// get the address network informatino
-	switch (addr_hex.substring(1,2)) {
-		case '0': addr_network = 'testnet'; break;
-		case '1': addr_network = 'mainnet'; break;
-		default: addr_network = 'unknown';
-	}
+        // check if it is a simple hash like a DRep, CC-Cold, CC-Hot hash. or an address hash with a prebyte
+	if ( addr_hex.length == 56 ) {  // its a simple hash
 
+		addr_type = 'hash';
+		addr_network = 'unknown';
+
+	} else { // its an address hash
+
+		// get the address type for information
+		switch (addr_hex.substring(0,1)) {
+			case '0': addr_type = 'payment base'; break;
+			case '1': addr_type = 'script base'; break;
+			case '2': addr_type = 'payment script'; break;
+			case '3': addr_type = 'script script'; break;
+			case '4': addr_type = 'payment pointer'; break;
+			case '5': addr_type = 'script pointer'; break;
+			case '6': addr_type = 'payment enterprise'; break;
+			case '7': addr_type = 'script'; break;
+			case 'e': addr_type = 'stake'; break;
+			case 'f': addr_type = 'stake script'; break;
+			default: addr_type = 'unknown';
+		}
+
+		// get the address network information
+		switch (addr_hex.substring(1,2)) {
+			case '0': addr_network = 'testnet'; break;
+			case '1': addr_network = 'mainnet'; break;
+			default: addr_network = 'unknown';
+		}
+
+	}
 
 	// optional check if the address matches the given publicKey
 	if ( publicKey && addr_hex.includes(getHash(publicKey, 28)) ) { // set addr_matchPubKey to true if the address contain the pubKey hash
@@ -547,7 +559,7 @@ async function main() {
 				console.error(`Error: The testnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`); process.exit(1); }
 
                         //check that the given address belongs to the pubKey
-                        if ( ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+                        if ( args['nohashcheck'] === false && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
                                 console.error(`Error: The ${sign_addr.type} address '${sign_addr.addr}' does not belong to the provided secret key.`); process.exit(1);
 			}
 
@@ -1168,7 +1180,7 @@ async function main() {
 					//read the address from a file or direct hex/bech
 				        sign_addr = readAddr2hex(address, pubKey);
 		                        //check that the given address belongs to the pubKey
-		                        if ( ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+		                        if ( ( args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
 		                                console.error(`Error: The given ${sign_addr.type} address '${sign_addr.addr}' does not belong to the public key in the COSE_Key.`); process.exit(1);
 					}
 
@@ -1176,7 +1188,7 @@ async function main() {
 					//read the sign_addr from the protectedHeader
 				        sign_addr = readAddr2hex(sign_addr_buffer.toString('hex'), pubKey);
 		                        //check that the address belongs to the pubKey
-		                        if ( ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+		                        if ( ( args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
 		                                console.error(`Error: The ${sign_addr.type} address '${sign_addr.addr}' in the COSE_Sign1 does not belong to the public key in the COSE_Key.`); process.exit(1);
 					}
 				}
