@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.16.0"
+const version = "1.16.1"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -1411,16 +1411,6 @@ async function main() {
 
 				case '1694H/1815H': //CIP36 voting keys
 
-					var skeyContent = `{ "type": "CIP36VoteExtendedSigningKey_ed25519", "description": "${vote_purpose_description} Vote Signing Key", "cborHex": "${prvKeyCbor}" }`;
-					if ( args['vkey-extended'] === true ) {
-						var vkeyContent = `{ "type": "CIP36VoteExtendedVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
-					} else {
-						var vkeyContent = `{ "type": "CIP36VoteVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
-					}
-					//generate the keys also in bech format
-					var prvKeyBech = bech32.encode("cvote_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
-					var pubKeyBech = bech32.encode("cvote_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
-
 					//get the --vote-purpose parameter, set default = 0
 					var vote_purpose_param = args['vote-purpose'];
 				        if ( typeof vote_purpose_param === 'undefined' ) { vote_purpose = 0 }  //if not defined, set it to default=0
@@ -1432,6 +1422,16 @@ async function main() {
 						case 0: var vote_purpose_description="Catalyst"; break;
 						default: var vote_purpose_description="Unknown";
 					}
+
+					var skeyContent = `{ "type": "CIP36VoteExtendedSigningKey_ed25519", "description": "${vote_purpose_description} Vote Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					if ( args['vkey-extended'] === true ) {
+						var vkeyContent = `{ "type": "CIP36VoteExtendedVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					} else {
+						var vkeyContent = `{ "type": "CIP36VoteVerificationKey_ed25519", "description": "${vote_purpose_description} Vote Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					}
+					//generate the keys also in bech format
+					var prvKeyBech = bech32.encode("cvote_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+					var pubKeyBech = bech32.encode("cvote_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 					break;
 
 
