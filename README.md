@@ -1,4 +1,4 @@
-# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths
+# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths<br>Canonize & Hash Governance Metadata CIP-100/108/119
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -10,7 +10,8 @@
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 * Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
 * Generate conway **dRep Keys, Constitutional Commitee Member Cold/Hot Keys** with or without **mnemonic words**.
-* Generate CIP36 voting-keys.
+* Canonized & Hash CIP-100/108/119 governance metadata jsonld data
+* Generate CIP-36 voting-keys.
 * A given address will automatically be checked against the used publicKey.
 
 ### What can cardano-signer verify?
@@ -25,6 +26,7 @@
 * **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
 * **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths
+* **[Hash mode](#hash-mode)**: Calculate the Hash for various specifications. (f.e. CIP-100/108/119 metadata)
 &nbsp;<p>
 
 ## Full syntax
@@ -33,7 +35,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.13.0
+cardano-signer 1.17.0
 
 Sign a hex/text-string or a binary-file:
 
@@ -47,7 +49,6 @@ Sign a hex/text-string or a binary-file:
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "signature + publicKey" or JSON-Format               default: hex-format
 
-
 Sign a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
 
    Syntax: cardano-signer sign --cip8
@@ -56,6 +57,7 @@ Sign a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            --address "<path_to_file>|<hex>|<bech>"              path to an address-file or a direct bech/hex format 'stake1..., stake_test1..., addr1...'
+           [--nohashcheck]                                      optional flag to not perform a check that the public-key belongs to the address/hash
            [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
            [--nopayload]                                        optional flag to exclude the payload from the COSE_Sign1 signature, default: included
            [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
@@ -103,6 +105,7 @@ Verify a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
            [--data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"]
                                                                 optional data/payload/file if not present in the COSE_Sign1 signature
            [--address "<path_to_file>|<hex>|<bech>"]            optional signing-address to do the verification with
+           [--nohashcheck]                                      optional flag to not perform a check that the public-key belongs to the address/hash
            [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
@@ -113,7 +116,7 @@ Generate Cardano ed25519/ed25519-extended keys:
 
    Syntax: cardano-signer keygen
    Params: [--path "<derivationpath>"]                          optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"
-                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep
+                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot
            [--mnemonics "word1 word2 ... word24"]               optional mnemonic words to derive the key from (separate via space)
            [--cip36]                                            optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)
            [--vote-purpose <unsigned_int>]                      optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)
@@ -124,6 +127,16 @@ Generate Cardano ed25519/ed25519-extended keys:
            [--out-vkey "<path_to_vkey_file>"]                   path to an output vkey-file
    Output: "secretKey + publicKey" or JSON-Format               default: hex-format
 
+
+Hash/Canonize the governance JSON-LD body metadata: (CIP-100)
+
+   Syntax: cardano-signer hash --cip100
+   Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
+                                                                data or file in jsonld format to canonize and hash
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--out-canonized "<path_to_file>"]                   path to an output file for the canonized data
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+   Output: "HASH of canonized body" or JSON-Format
 ```
 
 <br>
@@ -1168,11 +1181,101 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 
 <br>
 
+# Hash mode
+
+## Canonize & Hash CIP-100/108/119 governance metadata
+
+![image](https://github.com/user-attachments/assets/1c9b92c2-ddb4-4724-b2c8-7df5a16721a2)
+
+In this mode you can provide a governance metadata json/jsonld file to cardano-signer to canonize
+and hash the @context+body content. The hash is needed for verification and signing of the document authors.
+
+``` console
+cardano-signer hash --cip100 --data-file CIP108-example.json
+```
+Output - Hash of the canonized body content(hex) :
+```
+8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1
+```
+You can generate a nice json output via the `--json` or `--json-extended` flag
+``` console
+cardano-signer hash --cip100 --data-file CIP108-example.json --json-extended
+```
+``` json
+{
+  "workMode": "hash-cip100",
+  "hash": "8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1",
+  "body": {
+    "title": "Example CIP108(+CIP100) metadata",
+    "abstract": "This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...",
+    "motivation": "This must work, should be motivation enough.",
+    "rationale": "Let's keep testing stuff",
+    "references": [
+      {
+        "@type": "Other",
+        "label": "SanchoNet",
+        "uri": "https://sancho.network"
+      }
+    ],
+    "comment": "This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.",
+    "externalUpdates": [
+      {
+        "title": "SPO Scripts",
+        "uri": "https://github.com/gitmachtl/scripts"
+      },
+      {
+        "title": "Koios",
+        "uri": "https://koios.rest"
+      }
+    ]
+  },
+  "canonized": [
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#comment> \"This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n1 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n3 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#abstract> \"This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#motivation> \"This must work, should be motivation enough.\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#rationale> \"Let's keep testing stuff\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#references> _:c14n2 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#title> \"Example CIP108(+CIP100) metadata\"@en-us .",
+    "_:c14n1 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-title> \"SPO Scripts\"@en-us .",
+    "_:c14n1 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-uri> \"https://github.com/gitmachtl/scripts\"@en-us .",
+    "_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#OtherReference> .",
+    "_:c14n2 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#reference-label> \"SanchoNet\"@en-us .",
+    "_:c14n2 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#reference-uri> \"https://sancho.network\"@en-us .",
+    "_:c14n3 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-title> \"Koios\"@en-us .",
+    "_:c14n3 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-uri> \"https://koios.rest\"@en-us .",
+    "_:c14n4 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#body> _:c14n0 ."
+  ]
+}
+```
+
+If you're interested in the raw canonized data, that can be written out to an extra file using the `--out-canonized` parameter like:
+``` console
+cardano-signer hash --cip100 --data-file CIP108-example.json --out-canonized CIP108-example.canonized --json-extended
+```
+And of course you can write out the plaintext or json output also directly to a file like with the other functions. This is simply done by using the `--out-file` parameter.
+
+<br>
+
+
 
 <br>
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.17.0**
+  #### New Hash mode to Canonize & Hash Governance Metadata
+    - hash governance metadata following CIP-100, CIP-108, CIP-119 standard via the new `hash --cip100` option
+
+* **1.16.1**
+  #### Catalyst Vote Key Generation CIP36
+    - Bugfix: The description field of the generated *.vkey file was corrected to be 'Catalyst Vote Verification Key'
+
+* **1.16.0**
+  #### Signing & Verification in CIP-030/008 mode
+    - Added a new flag `--nohashcheck` for the signing and verification in CIP030/008 format. Using this flag will tell cardano-signer to not perform a check of the hash in the address-field against the public-key during the verification process. And additionally it can disable the address/hash check in the signing process too.
 
 * **1.15.1**
   #### General
