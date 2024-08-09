@@ -1268,6 +1268,7 @@ And of course you can write out the plaintext or json output also directly to a 
 * **1.17.0**
   #### General
      - Now using NODE.JS v18
+     - Updated all dependencies to the latest versions
 
   #### New Hash mode to Canonize & Hash Governance Metadata
      - hash governance metadata following CIP-100, CIP-108, CIP-119 standard via the new `hash --cip100` option

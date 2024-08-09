@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.16.1"
+const version = "1.17.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -12,11 +12,12 @@ const base64url = require('base64url'); //used for the CIP-8/CIP-30 user facing 
 const fnv32 = require('fnv32'); //used for CIP-8/CIP-30 checksum generation (fnv32a -> fnv32.fnv_1a) for the user facing signedMessage string "cms_..."
 const bip39 = require('bip39'); //used for mnemonics operations
 const crypto = require('crypto'); //used for crypto functions like entropy generation
+const jsonld = require('jsonld'); //used for canonizing json data (governance CIP-0100 metadata)
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck'], //all booleans are set to false per default
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet'],
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
@@ -161,6 +162,23 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'hash':
+	case 'hash-cip100':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Hash/Canonize the governance JSON-LD body metadata:${Reset} (CIP-100)`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}hash --cip100${Reset}`);
+		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
+		console.log(`								${Dim}data or file in jsonld format to canonize and hash${Reset}`);
+		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+		console.log(`           [${FgGreen}--out-canonized${Reset} "<path_to_file>"]			${Dim}path to an output file for the canonized data${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+	        console.log(`   Output: ${FgCyan}"HASH of canonized body"${Reset} or ${FgCyan}JSON-Format${Reset}`);
+	        console.log(``)
+		break;
+
+
+
 	default:
 		showUsage('sign',false);
 		showUsage('sign-cip8',false)
@@ -168,6 +186,7 @@ switch (topic) {
 		showUsage('verify',false)
 		showUsage('verify-cip8',false)
 		showUsage('keygen',false)
+		showUsage('hash-cip100',false)
 		console.log(``)
 		console.log(`${Dim}${Underscore}Info:${Reset}`);
 		console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
@@ -388,6 +407,7 @@ function getHash(content, digestLengthBytes = 32) { //hashes a given hex-string 
 }
 
 
+
 // MAIN
 //
 //
@@ -418,13 +438,15 @@ async function main() {
 		if ( args['deregister'] === true ) { workMode = workMode + "-deregister" }
 	}
 
-
+	//CIP100-Flag-Check
+        if ( args['cip100'] === true ) {workMode = workMode + '-cip100'}
 
 	//show usage for the workMode
 	if ( args['help'] === true ) { showUsage(workMode); }
 
 	//choose the workMode
         switch (workMode) {
+
 
                 case "sign":  //SIGN DATA IN DEFAULT MODE
 
@@ -1590,6 +1612,83 @@ async function main() {
 
 			break;
 
+
+		case "hash-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA
+
+			//lets try to load data from the data parameter
+			var data = args['data'];
+		        if ( typeof data === 'undefined' || data == '' ) {
+
+				//no data parameter present, lets try the data-file parameter
+				var data_file = args['data-file'];
+			        if ( typeof data_file === 'undefined' || data_file == '' ) {console.error(`Error: Missing data / data-file to hash`); showUsage(workMode);}
+
+				//data-file present lets try to read and parse the file
+				try {
+					var jsonld_data = JSON.parse(fs.readFileSync(data_file,'utf8')); //parse the given key as a json file
+				} catch (error) { console.error(`Error: Can't read data-file '${data_file}' or not valid JSON-LD data`); process.exit(1); }
+
+			} else {
+			//data parameter present, lets see if its valid json data
+				try {
+					var jsonld_data = JSON.parse(data);
+				} catch (error) { console.error(`Error: Not valid JSON data (${error})`); process.exit(1); }
+			}
+
+			//JSON data is loaded into jsonld_data, now lets only use the @context and body key
+			try {
+				var jsonld_data = { "body" : jsonld_data["body"], "@context": jsonld_data["@context"] }; // var jsonld_data = {}; jsonld_data["body"] = jsonld_doc["body"]; jsonld_data["@context"] = jsonld_doc["@context"];
+				if ( jsonld_data["body"] === undefined || jsonld_data["@context"] === undefined ) { console.error(`Error: JSON-LD must contain '@context' and 'body' data`); process.exit(1); }
+			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
+
+			//Start the async canonize process, will get triggered via the .then part once the process finished
+			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			        {
+				//data was successfully canonized
+
+					//output a canonized file if parameter is set
+					var out_canonized_filename = args['out-canonized'];
+				        //if there is a --out-canonized parameter specified then try to write out the file
+					if ( typeof out_canonized_filename === 'string' && out_canonized_filename != '' ) {
+						try {
+							fs.writeFileSync(out_canonized_filename,canonized_data, 'utf8')
+							// file written successfully
+						} catch (error) { console.error(`${error}`); process.exit(1); }
+					}
+
+					//get the hash of the canonized data
+					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
+
+					//compose the content for the output
+					if ( args['json'] === true ) { //generate content in json format
+						var content = `{ "hash": "${canonized_hash}" }`;
+					} else if ( args['json-extended'] === true ) { //generate content in extended json format
+						//split the canonized data into an array, remove the last element, do a loop for each element
+						var canonized_array = [];
+						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
+							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
+						})
+						var content = `{ "workMode": "${workMode}", "hash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonized": [ ${canonized_array} ] }`;
+					} else { //generate content in text format
+						var content = canonized_hash;
+					}
+
+					//output the content to the console or to a file
+					var out_file = args['out-file'];
+				        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+					if ( typeof out_file === 'undefined' || out_file == '' ) { console.log(content);} //Output to console
+					else { //else try to write the content out to the given file
+						try {
+						fs.writeFileSync(out_file,content, 'utf8')
+						// file written successfully
+						} catch (error) { console.error(`${error}`); process.exit(1); }
+					}
+
+			        }).catch( (err) => {console.log(`Error: Could not canonize the data (${err.message})`);process.exit(1);});
+
+			break;
+
+
 		default:
 		        //if workMode is not found, exit with and errormessage and showUsage
 			console.error(`Error: Unsupported mode '${workMode}'`);
@@ -1599,6 +1698,7 @@ async function main() {
 
 }
 
-main();
+//main();
+main().catch( (err) => {process.exit(1);} );
 
-process.exit(0); //we're finished, exit with errorcode 0 (all good)
+//process.exit(0); //we're finished, exit with errorcode 0 (all good)
