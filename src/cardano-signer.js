@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.17.0"
+const version = "1.18.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -142,6 +142,20 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'verify-cip100':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Verify Signatures in CIP-100 governance JSON-LD metadata:${Reset}`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip100${Reset}`);
+		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
+		console.log(`								${Dim}data or file in jsonld format to verify${Reset}`);
+		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+	        console.log(`   Output: ${FgCyan}"true/false"${Reset} or ${FgCyan}JSON-Format${Reset}`);
+	        console.log(``)
+		break;
+
+
 	case 'keygen':
 	case 'keygen-cip36':
 	        console.log(``)
@@ -185,6 +199,7 @@ switch (topic) {
 		showUsage('sign-cip36',false)
 		showUsage('verify',false)
 		showUsage('verify-cip8',false)
+		showUsage('verify-cip100',false)
 		showUsage('keygen',false)
 		showUsage('hash-cip100',false)
 		console.log(``)
@@ -1671,6 +1686,122 @@ async function main() {
 						var content = `{ "workMode": "${workMode}", "hash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonized": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = canonized_hash;
+					}
+
+					//output the content to the console or to a file
+					var out_file = args['out-file'];
+				        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+					if ( typeof out_file === 'undefined' || out_file == '' ) { console.log(content);} //Output to console
+					else { //else try to write the content out to the given file
+						try {
+						fs.writeFileSync(out_file,content, 'utf8')
+						// file written successfully
+						} catch (error) { console.error(`${error}`); process.exit(1); }
+					}
+
+			        }).catch( (err) => {console.log(`Error: Could not canonize the data (${err.message})`);process.exit(1);});
+
+			break;
+
+		case "verify-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA, CHECKS ALL THE AUTHORS SIGNATURES
+
+			//load default variable
+			var result = false //will be true if all authors signatures are valid/verified and no error occurs
+			var errorStr = '' //will hold an explanation about an error
+			var authors_array = [] //holds the authors for the output with there name and verified field
+
+			//lets try to load data from the data parameter
+			var data = args['data'];
+		        if ( typeof data === 'undefined' || data == '' ) {
+
+				//no data parameter present, lets try the data-file parameter
+				var data_file = args['data-file'];
+			        if ( typeof data_file === 'undefined' || data_file == '' ) {console.error(`Error: Missing data / data-file to hash`); showUsage(workMode);}
+
+				//data-file present lets try to read and parse the file
+				try {
+					var jsonld_input = JSON.parse(fs.readFileSync(data_file,'utf8')); //parse the given key as a json file
+				} catch (error) { console.error(`Error: Can't read data-file '${data_file}' or not valid JSON-LD data`); process.exit(1); }
+
+			} else {
+			//data parameter present, lets see if its valid json data
+				try {
+					var jsonld_input = JSON.parse(data);
+				} catch (error) { console.error(`Error: Not valid JSON data (${error})`); process.exit(1); }
+			}
+
+			//JSON data is loaded into jsonld_input, now lets only use the @context and body key
+			try {
+				if ( jsonld_input["body"] === undefined || jsonld_input["@context"] === undefined ) { console.error(`Error: JSON-LD must contain '@context' and 'body' data`); process.exit(1); }
+				var jsonld_data = { "body" : jsonld_input["body"], "@context": jsonld_input["@context"] }; // var jsonld_data = {}; jsonld_data["body"] = jsonld_doc["body"]; jsonld_data["@context"] = jsonld_doc["@context"];
+			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
+
+			//Start the async canonize process, will get triggered via the .then part once the process finished
+			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			        {
+				//data was successfully canonized
+
+					//get the hash of the canonized data
+					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown hashAlgorithm ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
+					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
+
+					//do all the testing now in the verifyAuthors block
+					verifyAuthors: {
+
+						//check that the authors entry is present , if not break with an errordescription
+						if ( jsonld_input["authors"] === undefined ) { errorStr='missing authors entry'; break verifyAuthors; }
+						var jsonld_authors = jsonld_input["authors"];
+						//check that the authors entry is an array
+						if ( typeof jsonld_authors !== 'object' || jsonld_authors instanceof Array == false ) { errorStr='authors entry is not an array'; break verifyAuthors; }
+						//check that the number of authors is not zero
+						if ( jsonld_authors.length == 0) { errorStr='no authors in the authors-array'; break verifyAuthors; }
+						//check each authors array entry
+						jsonld_authors.every( authorEntry => {
+							var authorName = authorEntry["name"]; if (typeof authorName !== 'string') { errorStr='authors.name entry is not an string'; return false; }
+							var authorWitness = authorEntry["witness"]; if (typeof authorWitness !== 'object') { errorStr='authors.witness entry is missing or not a json object'; return false; }
+							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"]; if (authorWitnessAlgorithm != 'ed25519') { errorStr=`authors.witness.algorithm entry for '${authorName}' is missing or not 'ed25519'`; return false; }
+
+							var authorWitnessPublicKey = authorWitness["publicKey"]; if (typeof authorWitnessPublicKey !== 'string' || ! regExpHex.test(authorWitnessPublicKey) ) { errorStr=`authors.witness.publickey entry for '${authorName}' is not a valid hex-string`; return false; }
+							//load the public key
+							try {
+								var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(authorWitnessPublicKey,'hex'));
+							} catch (error) { errorStr=`authors.witness.publickey entry for '${authorName}' error ${error}`; return false; }
+
+							var authorWitnessSignature = authorWitness["signature"]; if (typeof authorWitnessSignature !== 'string' || ! regExpHex.test(authorWitnessSignature) ) { errorStr=`authors.witness.signature entry for '${authorName}' is not a valid hex-string`; return false; }
+
+							//load the Ed25519Signature
+							try {
+								var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
+							} catch (error) { errorStr=`authors.witness.signature entry for '${authorName}' error ${error}`; return false; }
+
+							//do the verification
+							var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
+							if (!verified) { errorStr=`at least one invalid signature found`; }
+
+							//add it to the array of authors
+							var authorArrayEntry = { "name" : authorName, "publicKey" : authorWitnessPublicKey, "signature" : authorWitnessSignature, "valid" : verified };
+							authors_array.push(authorArrayEntry);
+
+							//return=true -> go to the next entry
+							return true;
+						})
+
+					}
+
+					if ( errorStr == '' ) { result = true; }
+
+					//compose the content for the output
+					if ( args['json'] === true ) { //generate content in json format
+						var content = `{ "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + ` }`;
+					} else if ( args['json-extended'] === true ) { //generate content in extended json format
+						//split the canonized data into an array, remove the last element, do a loop for each element
+						var canonized_array = [];
+						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
+							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
+						})
+						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "hash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonized": [ ${canonized_array} ] }`;
+					} else { //generate content in text format
+						var content = result;
 					}
 
 					//output the content to the console or to a file
