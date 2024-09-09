@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.18.0"
+const version = "1.19.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -16,10 +16,10 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck'], //all booleans are set to false per default
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name'],
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
 			const numberParams = ['nonce', 'vote-weight', 'vote-purpose']; //these are parameter which specifies numbers, so they are not in the lists above, we only throw an error if the unknownParameter is not in this list
 			if ( ! numberParams.includes(unknownParameter.substring(2).toLowerCase()) ) { //throw an error if given parameterName is not in any of the lists above
@@ -106,6 +106,21 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'sign-cip100':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors):${Reset}`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip100${Reset}`);
+		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
+		console.log(`								${Dim}data or file in jsonld format to verify${Reset}`);
+		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
+		console.log(`           ${FgGreen}--author-name${Reset} "<name-of-signing-author>"		${Dim}name of the signing author f.e. "John Doe"${Reset}`);
+		console.log(`           [${FgGreen}--replace${Reset}]						${Dim}optional flag to replace the authors entry with the same public-key${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+	        console.log(`   Output: ${FgCyan}"Signed JSON-LD Content"${Reset} or ${FgCyan}"JSON-HashInfo if --out-file is used"${Reset}`);
+	        console.log(``)
+		break;
+
 	case 'verify':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Verify a hex/text-string or a binary-file via signature + publicKey:${Reset}`)
@@ -176,32 +191,32 @@ switch (topic) {
 	        console.log(``)
 		break;
 
-	case 'hash':
-	case 'hash-cip100':
+	case 'canonize':
+	case 'canonize-cip100':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Hash/Canonize the governance JSON-LD body metadata:${Reset} (CIP-100)`)
+	        console.log(`${Bright}${Underscore}Canonize&Hash the governance JSON-LD body metadata for author-signatures:${Reset} (CIP-100)`)
 	        console.log(``)
-	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}hash --cip100${Reset}`);
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}canonize --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
 		console.log(`								${Dim}data or file in jsonld format to canonize and hash${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-canonized${Reset} "<path_to_file>"]			${Dim}path to an output file for the canonized data${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
-	        console.log(`   Output: ${FgCyan}"HASH of canonized body"${Reset} or ${FgCyan}JSON-Format${Reset}`);
+	        console.log(`   Output: ${FgCyan}"HASH of canonized body"${Reset} or ${FgCyan}JSON-Format${Reset}		${FgRed}NOTE: This is NOT the anchor-url-hash!!!${Reset}`);
 	        console.log(``)
 		break;
-
 
 
 	default:
 		showUsage('sign',false);
 		showUsage('sign-cip8',false)
 		showUsage('sign-cip36',false)
+		showUsage('sign-cip100',false)
 		showUsage('verify',false)
 		showUsage('verify-cip8',false)
 		showUsage('verify-cip100',false)
 		showUsage('keygen',false)
-		showUsage('hash-cip100',false)
+		showUsage('canonize-cip100',false)
 		console.log(``)
 		console.log(`${Dim}${Underscore}Info:${Reset}`);
 		console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
@@ -337,7 +352,9 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 	//	type -> addresstype (payment-base, payment-enterprise, stake)
 	//	network -> 'mainnet' or 'testnet'
 	//	matchPubKey -> true or false
-	let addr_hex, addr_type, addr_network;
+	let addr_hex;
+	let addr_type = 'hash';
+	let addr_network = 'unknown';
 	let addr_matchPubKey = false;
 
 	// first check, if the given address is an empty string, exit with an error
@@ -347,14 +364,32 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 	try {  // outer try is needed to check if the file is present in first place
 		const content = trimString(fs.readFileSync(addr,'utf8')); //read the content of the given addr from a file
 		try { // inner try to check if the content is a bech address
-			addr_hex = CardanoWasm.Address.from_bech32(content).to_hex();
+
+			addr_hex = Buffer.from(bech32.fromWords(bech32.decode(content,1000).words)).toString('hex');
+			//ok, no failure so far. lets check if we can figure out if its a governance bech
+			if ( content.startsWith('drep') && addr_hex.length == 56 ) 	{ addr_type = 'drep'; }
+			else if ( content.startsWith('drep_script') ) 			{ addr_type = 'drep script'; }
+			else if ( content.startsWith('cc_cold') && addr_hex.length == 56 ) { addr_type = 'committee-cold'; }
+			else if ( content.startsWith('cc_cold_script') )			{ addr_type = 'committee-cold script'; }
+			else if ( content.startsWith('cc_hot') && addr_hex.length == 56 )	{ addr_type = 'committee-hot'; }
+			else if ( content.startsWith('cc_hot_script') )			{ addr_type = 'committee-hot script'; }
+
 		} catch (error) { console.error(`Error: The address in file '${addr}' is not a valid bech address`); process.exit(1); }
 	} catch (error) {}
 
 	// try to use the parameter as a bech encoded string
 	if ( ! addr_hex ) {
 		try {
-			addr_hex = CardanoWasm.Address.from_bech32(addr).to_hex();
+
+			addr_hex = Buffer.from(bech32.fromWords(bech32.decode(addr,1000).words)).toString('hex'); //old (does not support drep1,cc_hot, etc prefixes) addr_hex = CardanoWasm.Address.from_bech32(content).to_hex();
+			//ok, no failure so far. lets check if we can figure out if its a governance bech
+			if ( addr.startsWith('drep') && addr_hex.length == 56 ) 	{ addr_type = 'drep'; }
+			else if ( addr.startsWith('drep_script') ) 			{ addr_type = 'drep script'; }
+			else if ( addr.startsWith('cc_cold') && addr_hex.length == 56 ) { addr_type = 'committee-cold'; }
+			else if ( addr.startsWith('cc_cold_script') )			{ addr_type = 'committee-cold script'; }
+			else if ( addr.startsWith('cc_hot') && addr_hex.length == 56 )	{ addr_type = 'committee-hot'; }
+			else if ( addr.startsWith('cc_hot_script') )			{ addr_type = 'committee-hot script'; }
+
 		} catch (error) {}
 	}
 
@@ -368,34 +403,45 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 	// we have a valid address in the addr_hex variable
 
 
-        // check if it is a simple hash like a DRep, CC-Cold, CC-Hot hash. or an address hash with a prebyte
-	if ( addr_hex.length == 56 ) {  // its a simple hash
+        // check the address type if addr_hex is longer than 56 chars, otherwise its a simple hash
+	if ( addr_hex.length > 56 && addr_type == 'hash' ) {
 
-		addr_type = 'hash';
-		addr_network = 'unknown';
+		hashcheck: {
 
-	} else { // its an address hash
+			// check if there is a cip129 governance hash present (hash hex length 58 chars)
+			if (addr_hex.length == 58) {
+				switch (addr_hex.substring(0,2)) {
+					case '02': addr_type = 'committee-hot cip129'; break hashcheck; break;
+					case '03': addr_type = 'committee-hot script cip129'; break hashcheck; break;
+					case '12': addr_type = 'committee-cold cip129'; break hashcheck; break;
+					case '13': addr_type = 'committee-cold script cip129'; break hashcheck; break;
+					case '22': addr_type = 'drep cip129'; break hashcheck; break;
+					case '23': addr_type = 'drep script cip129'; break hashcheck; break;
+				}
+			}
 
-		// get the address type for information
-		switch (addr_hex.substring(0,1)) {
-			case '0': addr_type = 'payment base'; break;
-			case '1': addr_type = 'script base'; break;
-			case '2': addr_type = 'payment script'; break;
-			case '3': addr_type = 'script script'; break;
-			case '4': addr_type = 'payment pointer'; break;
-			case '5': addr_type = 'script pointer'; break;
-			case '6': addr_type = 'payment enterprise'; break;
-			case '7': addr_type = 'script'; break;
-			case 'e': addr_type = 'stake'; break;
-			case 'f': addr_type = 'stake script'; break;
-			default: addr_type = 'unknown';
-		}
+			// check normal hashes
+			// get the address type for information
+			switch (addr_hex.substring(0,1)) {
+				case '0': addr_type = 'payment base'; break;
+				case '1': addr_type = 'script base'; break;
+				case '2': addr_type = 'payment script'; break;
+				case '3': addr_type = 'script script'; break;
+				case '4': addr_type = 'payment pointer'; break;
+				case '5': addr_type = 'script pointer'; break;
+				case '6': addr_type = 'payment enterprise'; break;
+				case '7': addr_type = 'script'; break;
+				case 'e': addr_type = 'stake'; break;
+				case 'f': addr_type = 'stake script'; break;
+				default: addr_type = 'unknown';
+			}
 
-		// get the address network information
-		switch (addr_hex.substring(1,2)) {
-			case '0': addr_network = 'testnet'; break;
-			case '1': addr_network = 'mainnet'; break;
-			default: addr_network = 'unknown';
+			// get the address network information
+			switch (addr_hex.substring(1,2)) {
+				case '0': addr_network = 'testnet'; break;
+				case '1': addr_network = 'mainnet'; break;
+				default: addr_network = 'unknown';
+			}
 		}
 
 	}
@@ -1628,7 +1674,7 @@ async function main() {
 			break;
 
 
-		case "hash-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA
+		case "canonize-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA
 
 			//lets try to load data from the data parameter
 			var data = args['data'];
@@ -1676,14 +1722,14 @@ async function main() {
 
 					//compose the content for the output
 					if ( args['json'] === true ) { //generate content in json format
-						var content = `{ "hash": "${canonized_hash}" }`;
+						var content = `{ "canonizedHash": "${canonized_hash}" }`;
 					} else if ( args['json-extended'] === true ) { //generate content in extended json format
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
 							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
 						})
-						var content = `{ "workMode": "${workMode}", "hash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonized": [ ${canonized_array} ] }`;
+						var content = `{ "workMode": "${workMode}", "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = canonized_hash;
 					}
@@ -1749,7 +1795,7 @@ async function main() {
 					verifyAuthors: {
 
 						//check that the authors entry is present , if not break with an errordescription
-						if ( jsonld_input["authors"] === undefined ) { errorStr='missing authors entry'; break verifyAuthors; }
+						if ( jsonld_input["authors"] === undefined ) { errorStr='missing authors field'; break verifyAuthors; }
 						var jsonld_authors = jsonld_input["authors"];
 						//check that the authors entry is an array
 						if ( typeof jsonld_authors !== 'object' || jsonld_authors instanceof Array == false ) { errorStr='authors entry is not an array'; break verifyAuthors; }
@@ -1766,6 +1812,10 @@ async function main() {
 							try {
 								var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(authorWitnessPublicKey,'hex'));
 							} catch (error) { errorStr=`authors.witness.publickey entry for '${authorName}' error ${error}`; return false; }
+
+							//check if there is a duplicated entry already for that public key
+							var hasDuplicates = authors_array.some( element => { return element["publicKey"] === authorWitnessPublicKey });
+							if (hasDuplicates) { errorStr=`authors.witness.publickey entry for '${authorName}' has duplicates`; return false; }
 
 							var authorWitnessSignature = authorWitness["signature"]; if (typeof authorWitnessSignature !== 'string' || ! regExpHex.test(authorWitnessSignature) ) { errorStr=`authors.witness.signature entry for '${authorName}' is not a valid hex-string`; return false; }
 
@@ -1799,7 +1849,7 @@ async function main() {
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
 							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
 						})
-						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "hash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonized": [ ${canonized_array} ] }`;
+						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = result;
 					}
@@ -1815,7 +1865,160 @@ async function main() {
 						} catch (error) { console.error(`${error}`); process.exit(1); }
 					}
 
-			        }).catch( (err) => {console.log(`Error: Could not canonize the data (${err.message})`);process.exit(1);});
+			        }).catch( (err) => {console.log(`Error: Could not verify the data (${err.message})`);process.exit(1);});
+
+			break;
+
+
+		case "sign-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA, SIGN THE DOCUMENT AND ADD AUTHORS
+
+			//load default variable
+			var authors_array = [] //holds the authors for the output with there name and verified field
+			var all_authors_publickey_array = [] //holds a list of all publickeys of the authors
+
+			//get signing key -> store it in sign_key
+			var key_file_hex = args['secret-key'];
+		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { console.error(`Error: Missing secret key parameter`); showUsage(workMode); }
+
+			//read in the key from a file or direct hex
+		        sign_key = readKey2hex(key_file_hex, 'secret');
+
+			//load the private key (normal or extended)
+			try {
+			if ( sign_key.length <= 64 ) { var prvKey = CardanoWasm.PrivateKey.from_normal_bytes(Buffer.from(sign_key, "hex")); }
+						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(sign_key.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars), rest is publicKey + chainCode
+			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+
+			//generate the public key from the secret key for external verification
+			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
+
+			//get author name -> store it in add_author_name
+			var add_author_name = args['author-name'];
+		        if ( typeof add_author_name === 'undefined' || add_author_name === true || add_author_name == '' ) { console.error(`Error: Missing author name parameter`); showUsage(workMode); }
+
+			//FIRST, we verify the input JSONLD File
+
+			//lets try to load data from the data parameter
+			var data = args['data'];
+		        if ( typeof data === 'undefined' || data == '' ) {
+
+				//no data parameter present, lets try the data-file parameter
+				var data_file = args['data-file'];
+			        if ( typeof data_file === 'undefined' || data_file == '' ) {console.error(`Error: Missing data / data-file to hash`); showUsage(workMode);}
+
+				//data-file present lets try to read and parse the file
+				try {
+					var jsonld_input = JSON.parse(fs.readFileSync(data_file,'utf8')); //parse the given key as a json file
+				} catch (error) { console.error(`Error: Can't read data-file '${data_file}' or not valid JSON-LD data`); process.exit(1); }
+
+			} else {
+			//data parameter present, lets see if its valid json data
+				try {
+					var jsonld_input = JSON.parse(data);
+				} catch (error) { console.error(`Error: Not valid JSON data (${error})`); process.exit(1); }
+			}
+
+			//JSON data is loaded into jsonld_input, now lets only use the @context and body key
+			try {
+				if ( jsonld_input["body"] === undefined || jsonld_input["@context"] === undefined ) { console.error(`Error: JSON-LD must contain '@context' and 'body' data`); process.exit(1); }
+				var jsonld_data = { "body" : jsonld_input["body"], "@context": jsonld_input["@context"] }; // var jsonld_data = {}; jsonld_data["body"] = jsonld_doc["body"]; jsonld_data["@context"] = jsonld_doc["@context"];
+			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
+
+			//Start the async canonize process, will get triggered via the .then part once the process finished
+			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			        {
+				//data was successfully canonized
+
+					//get the hash of the canonized data
+					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown hashAlgorithm ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
+					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
+
+					//sign the data
+					try {
+						var signedBytes = prvKey.sign(Buffer.from(canonized_hash, 'hex')).to_bytes();
+						var signature = Buffer.from(signedBytes).toString('hex');
+					} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+
+					//OK, at this point we have canonized and hash the @context&body content, also we have checked that the hashAlgorithm is correct
+					//now lets check the authors field. if present, load it and check signatures that may be already present, if we detect a wrong one, exit with an error
+
+					//do all the testing now in the verifyAuthors block
+					verifyAuthors: {
+
+						//check that the authors entry is present , if not make a blank array and exit the verifyAthors checks
+						if ( jsonld_input["authors"] === undefined ) { break verifyAuthors; }
+						var jsonld_authors = jsonld_input["authors"];
+						//check that the authors entry is an array
+						if ( typeof jsonld_authors !== 'object' || jsonld_authors instanceof Array == false ) { console.error(`Error: authors entry is not an array`); process.exit(1); }
+						//check each authors array entry
+						jsonld_authors.every( authorEntry => {
+							var authorName = authorEntry["name"]; if (typeof authorName !== 'string') { console.error(`Error: authors.name entry is not an string`); process.exit(1); }
+							var authorWitness = authorEntry["witness"]; if (typeof authorWitness !== 'object') { console.error(`Error: authors.witness entry is missing or not a json object`); process.exit(1); }
+							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"]; if (authorWitnessAlgorithm != 'ed25519') { console.error(`Error: authors.witness.algorithm entry for '${authorName}' is missing or not 'ed25519'`); process.exit(1); }
+							var authorWitnessPublicKey = authorWitness["publicKey"]; if (typeof authorWitnessPublicKey !== 'string' || ! regExpHex.test(authorWitnessPublicKey) ) { console.error(`Error: authors.witness.publickey entry for '${authorName}' is not a valid hex-string`); process.exit(1); }
+							//load the public key
+							try {
+								var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(authorWitnessPublicKey,'hex'));
+							} catch (error) { console.error(`Error: authors.witness.publickey entry for '${authorName}' error ${error}`); process.exit(1); }
+
+							//check if the current authors publicKey is the same as the one we wanna add
+							if ( authorWitnessPublicKey == pubKey ) {
+								switch (args['replace']) {
+									case true: 	return true; break;  //publickey entry is the same, we wanna replace it with the new entry -> go to the next authors entry and don't add it to the existing list
+									case false:	console.error(`Error: authors.witness.publickey entry for '${authorName}' is the same as the one you wanna add. please use the flag --replace if you wanna replace the entry`); process.exit(1); break;
+								}
+							}
+
+							//check if there is a duplicated entry already for that public key
+							var hasDuplicates = authors_array.some( element => { return element["witness"]["publicKey"] === authorWitnessPublicKey });
+							if (hasDuplicates) { console.error(`Error: authors.witness.publickey '${authorWitnessPublicKey}' in author '${authorName}' has duplicated entries! public keys must be unique, please remove duplicates first.`); process.exit(1); }
+
+							//get the entries witness signature
+							var authorWitnessSignature = authorWitness["signature"]; if (typeof authorWitnessSignature !== 'string' || ! regExpHex.test(authorWitnessSignature) ) { console.error(`Error: authors.witness.signature entry for '${authorName}' is not a valid hex-string`); process.exit(1); }
+
+							//load the Ed25519Signature
+							try {
+								var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
+							} catch (error) { console.error(`Error: authors.witness.signature entry for '${authorName}' error ${error}`); process.exit(1); }
+
+							//do the verification
+							var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
+							if (!verified) { console.error(`Error: signature of '${authorName}' is invalid`); process.exit(1); }
+
+							//at this point, the existing author has been verified, add it to the array of authors
+							var authorArrayEntry = { "name" : authorName,  "witness": { "witnessAlgorithm": authorWitnessAlgorithm, "publicKey" : authorWitnessPublicKey, "signature" : authorWitnessSignature } };
+							authors_array.push(authorArrayEntry);
+//							all_authors_publickey_array.push(authorWitnessPublicKey); //add the publickey to the extra array for easier dublicate entry check
+
+							//return=true -> go to the next entry
+							return true;
+						})
+
+					}
+
+					//we are finished with the authors verification, also we have already signed the canonized_hash
+					var authorArrayEntry = { "name" : add_author_name, "witness": { "witnessAlgorithm": "ed25519", "publicKey" : pubKey, "signature" : signature } };
+					authors_array.push(authorArrayEntry);
+
+					//set the authors field in the JSONLD content
+					jsonld_input["authors"] = authors_array;
+
+					var content = JSON.stringify(jsonld_input, null, 2);
+
+					//output the content to the console or to a file
+					var out_file = args['out-file'];
+				        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+					if ( typeof out_file === 'undefined' || out_file == '' ) { console.log(content);} //Output to console
+					else { //else try to write the content out to the given file
+						try {
+						fs.writeFileSync(out_file,content, 'utf8')
+						// file written successfully
+						var anchorHash = getHash(Buffer.from(content));
+						console.log(`{ "workMode": "${workMode}", "outFile": "${out_file}", "anchorHash": "${anchorHash}" }`);
+						} catch (error) { console.error(`${error}`); process.exit(1); }
+					}
+
+			        }).catch( (err) => {console.log(`Error: Could not sign the data (${err.message})`);process.exit(1);});
 
 			break;
 
