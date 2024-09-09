@@ -37,7 +37,7 @@
 
 $ ./cardano-signer help
 
-cardano-signer 1.17.0
+cardano-signer 1.19.0
 
 Sign a hex/text-string or a binary-file:
 
@@ -50,6 +50,7 @@ Sign a hex/text-string or a binary-file:
            [--jcli | --bech]                                    optional flag to generate signature & publicKey in jcli compatible bech-format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "signature + publicKey" or JSON-Format               default: hex-format
+
 
 Sign a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
 
@@ -85,6 +86,18 @@ Sign a catalyst registration/delegation or deregistration in CIP-36 mode:
    Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
 
 
+Sign a governance JSON-LD metadata file with a Secret-Key (add authors):
+
+   Syntax: cardano-signer sign --cip100
+   Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
+                                                                data or file in jsonld format to verify
+           --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
+           --author-name "<name-of-signing-author>"             name of the signing author f.e. "John Doe"
+           [--replace]                                          optional flag to replace the authors entry with the same public-key
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+   Output: "Signed JSON-LD Content" or "JSON-HashInfo if --out-file is used"
+
+
 Verify a hex/text-string or a binary-file via signature + publicKey:
 
    Syntax: cardano-signer verify
@@ -114,6 +127,16 @@ Verify a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 
+Verify Signatures in CIP-100 governance JSON-LD metadata:
+
+   Syntax: cardano-signer verify --cip100
+   Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
+                                                                data or file in jsonld format to verify
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+   Output: "true/false" or JSON-Format
+
+
 Generate Cardano ed25519/ed25519-extended keys:
 
    Syntax: cardano-signer keygen
@@ -130,15 +153,15 @@ Generate Cardano ed25519/ed25519-extended keys:
    Output: "secretKey + publicKey" or JSON-Format               default: hex-format
 
 
-Hash/Canonize the governance JSON-LD body metadata: (CIP-100)
+Canonize&Hash the governance JSON-LD body metadata for author-signatures: (CIP-100)
 
-   Syntax: cardano-signer hash --cip100
+   Syntax: cardano-signer canonize --cip100
    Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
                                                                 data or file in jsonld format to canonize and hash
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-canonized "<path_to_file>"]                   path to an output file for the canonized data
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
-   Output: "HASH of canonized body" or JSON-Format
+   Output: "HASH of canonized body" or JSON-Format              NOTE: This is NOT the anchor-url-hash!!!
 ```
 
 <br>
@@ -1187,7 +1210,7 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 
 ## Canonize & Hash CIP-100/108/119 governance metadata
 
-![image](https://github.com/user-attachments/assets/1c9b92c2-ddb4-4724-b2c8-7df5a16721a2)
+![image](https://github.com/user-attachments/assets/9fe8403d-e43d-4469-9466-5ee7c07cacb0)
 
 In this mode you can provide a governance metadata json/jsonld file to cardano-signer to canonize
 and hash the @context+body content. The hash is needed for verification and signing of the document authors.
