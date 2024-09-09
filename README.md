@@ -1,4 +1,4 @@
-# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths<br>Canonize & Hash Governance Metadata CIP-100/108/119
+# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -11,6 +11,7 @@
 * Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
 * Generate conway **dRep Keys, Constitutional Commitee Member Cold/Hot Keys** with or without **mnemonic words**.
 * Canonized & Hash CIP-100/108/119 governance metadata jsonld data
+* Sign CIP-100/108/119 governacne metadata by adding an authors signature to the document
 * Generate CIP-36 voting-keys.
 * A given address will automatically be checked against the used publicKey.
 
@@ -18,6 +19,7 @@
 * **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
 * The signature can be provided in hex format or also in bech encoded `ed25519_sig` format. **Cardano-signer can be used instead of jcli for verification**.
 * Verify **CIP-8 / CIP-30** COSE_Sign1/COSE_Key data. With hashed or non-hashed payloads. There is also a detailed check on the COSE_Sign1 and COSE_Key data structure included. Verification can be done on the COSE_Sign1 + COSE_Key, or COSE_Sign1 + COSE_Key + payload and/or address.
+* Verify **CIP-100/108/119** metadata JSONLD files
 
 &nbsp;<p>
 
@@ -26,7 +28,7 @@
 * **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
 * **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths
-* **[Hash mode](#hash-mode)**: Calculate the Hash for various specifications. (f.e. CIP-100/108/119 metadata)
+* **[Canonize mode](#canonize-mode)**: Calculate the canonizedBodyHash for various specifications. (f.e. CIP-100/108/119 metadata)
 &nbsp;<p>
 
 ## Full syntax
@@ -1181,7 +1183,7 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 
 <br>
 
-# Hash mode
+# Canonize mode
 
 ## Canonize & Hash CIP-100/108/119 governance metadata
 
@@ -1191,7 +1193,7 @@ In this mode you can provide a governance metadata json/jsonld file to cardano-s
 and hash the @context+body content. The hash is needed for verification and signing of the document authors.
 
 ``` console
-cardano-signer hash --cip100 --data-file CIP108-example.json
+cardano-signer canonize --cip100 --data-file CIP108-example.json
 ```
 Output - Hash of the canonized body content(hex) :
 ```
@@ -1199,12 +1201,12 @@ Output - Hash of the canonized body content(hex) :
 ```
 You can generate a nice json output via the `--json` or `--json-extended` flag
 ``` console
-cardano-signer hash --cip100 --data-file CIP108-example.json --json-extended
+cardano-signer canonize --cip100 --data-file CIP108-example.json --json-extended
 ```
 ``` json
 {
   "workMode": "hash-cip100",
-  "hash": "8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1",
+  "canonizedHash": "8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1",
   "body": {
     "title": "Example CIP108(+CIP100) metadata",
     "abstract": "This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...",
@@ -1229,7 +1231,7 @@ cardano-signer hash --cip100 --data-file CIP108-example.json --json-extended
       }
     ]
   },
-  "canonized": [
+  "canonizedBody": [
     "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#comment> \"This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.\"@en-us .",
     "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n1 .",
     "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n3 .",
@@ -1252,7 +1254,7 @@ cardano-signer hash --cip100 --data-file CIP108-example.json --json-extended
 
 If you're interested in the raw canonized data, that can be written out to an extra file using the `--out-canonized` parameter like:
 ``` console
-cardano-signer hash --cip100 --data-file CIP108-example.json --out-canonized CIP108-example.canonized --json-extended
+cardano-signer canonized --cip100 --data-file CIP108-example.json --out-canonized CIP108-example.canonized --json-extended
 ```
 And of course you can write out the plaintext or json output also directly to a file like with the other functions. This is simply done by using the `--out-file` parameter.
 
@@ -1265,13 +1267,29 @@ And of course you can write out the plaintext or json output also directly to a 
 
 ## Release Notes / Change-Logs
 
+* **1.19.0**
+  #### NEW FUNCTION - Adding authors signatures for CIP100 JSONLD metadata
+     - A new function is now available via the 'sign --cip100' parameter. Its now possible to add authors entries (Name + Signature) with a single command using cardano-signer
+  #### UPDATE/CHANGES:
+     - cardano-signer is now compatible with CIP129 standard for drep, committee-cold and committee-hot bech strings. this works now for all functions that allow a '--address' parameter.
+     - CIP 8/30 DataSign:
+       - you can now directly also use governance bech-ids for the '--address' parameter like 'drep1xxx'
+     - CIP 100 - Governance:
+       - the canonize&hash command 'hash' introduced in version 1.17 was renamed to 'canonize'. change was made to avoid confusion, because this command is to output the hash of the canonized body, not the file-hash.
+       - output fields of the 'canonize' and 'verify' function changed 'hash' is now 'canonizedHash', 'canonized' is now 'canonizedBody'
+       - in addition to the existing checks in the 'verify' function, cardano-signer now also checks for duplicated public-key entries in the authors array of the input jsonld file
+
+* **1.18.0**
+  #### General
+     - verify governance metadata following CIP-100, CIP-108, CIP-119 standard via the new `verify --cip100` option
+
 * **1.17.0**
   #### General
      - Now using NODE.JS v18
      - Updated all dependencies to the latest versions
 
   #### New Hash mode to Canonize & Hash Governance Metadata
-     - hash governance metadata following CIP-100, CIP-108, CIP-119 standard via the new `hash --cip100` option
+     - canonize & hash governance metadata following CIP-100, CIP-108, CIP-119 standard via the new `canonize --cip100` option
 
 * **1.16.1**
   #### Catalyst Vote Key Generation CIP36
