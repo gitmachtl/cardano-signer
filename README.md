@@ -28,14 +28,14 @@
 * **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
 * **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths
-* **[Canonize mode](#canonize-mode)**: Calculate the canonizedBodyHash for various specifications. (f.e. CIP-100/108/119 metadata)
+* **[CIP-100 / CIP-108 / CIP-119 mode](#cip-100--cip-108--cip-119-mode)**: Sign, Verify and Canonize governance metadata
 &nbsp;<p>
 
 ## Full syntax
 
 ``` console
 
-$ ./cardano-signer help
+$ cardano-signer help
 
 cardano-signer 1.19.0
 
@@ -1204,11 +1204,201 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 
 **If you wanna use your own mnemonics, just provide them via the `--mnemonics` parameter!**
 
+&nbsp;<p>&nbsp;<p>
+
+# CIP-100 / CIP-108 / CIP-119 mode
+
+## Sign governance metadata and add author(s) field
+
+![image](https://github.com/user-attachments/assets/06217286-dd0c-4536-bc27-201fd5d5ea72)
+
+If you input a JSONLD governance file (context part not shown) like
+```json
+{
+...
+  "hashAlgorithm": "blake2b-256",
+  "body": {
+    "title": "Example CIP108(+CIP100) metadata",
+    "abstract": "This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...",
+    "motivation": "This must work, should be motivation enough.",
+    "rationale": "Let's keep testing stuff",
+    "references": [
+      {
+        "@type": "Other",
+        "label": "SanchoNet",
+        "uri": "https://sancho.network"
+      }
+    ],
+    "comment": "This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.",
+    "externalUpdates": [
+      {
+        "title": "SPO Scripts",
+        "uri": "https://github.com/gitmachtl/scripts"
+      },
+      {
+        "title": "Koios",
+        "uri": "https://koios.rest"
+      }
+    ]
+  }
+}
+```
+and running
+``` console
+cardano-signer.js sign --cip100 \
+                       --data-file CIP108-example.json \
+                       --secret-key dummy.skey \
+                       --author-name "The great Name" \
+                       --out-file CIP108-example-signed.json
+```
+
+generates you the governance metadata file with the added signature:
+```json
+{
+...
+  "hashAlgorithm": "blake2b-256",
+  "body": {
+    "title": "Example CIP108(+CIP100) metadata",
+    "abstract": "This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...",
+    "motivation": "This must work, should be motivation enough.",
+    "rationale": "Let's keep testing stuff",
+    "references": [
+      {
+        "@type": "Other",
+        "label": "SanchoNet",
+        "uri": "https://sancho.network"
+      }
+    ],
+    "comment": "This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.",
+    "externalUpdates": [
+      {
+        "title": "SPO Scripts",
+        "uri": "https://github.com/gitmachtl/scripts"
+      },
+      {
+        "title": "Koios",
+        "uri": "https://koios.rest"
+      }
+    ]
+  },
+  "authors": [
+    {
+      "name": "The great Name",
+      "witness": {
+        "witnessAlgorithm": "ed25519",
+        "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9",
+        "signature": "8b579ba2cb9bcb2355e550a67865d56017d4696a4a48f8db5218a92a7f85bb3ddcde13500b89531c68a3f52deb83ca45f1987ea048500e11feee26847cb6b900"
+      }
+    }
+  ]
+}
+```
+
+Cardano-Signer is doing the following steps to sign the document:
+* check that the provided input data is a valid JSON file
+* canonize the `@context` and `body` part via URDNA2015 method and hash it via black2b-256 method
+* check that the `hashAlgorithm` is `black2b-256`
+* check any preexisting `authors` array entry to be valid
+* check that there is no duplicated public-key entry
+* sign the canonized hash with the provided secret-key and author-name
+
+Additional authors can be added by simply running the same command multiple times! 
+
+Also, if you write out the new file directly via the `--out-file` parameter, the output of cardano-signer becomes a json with the basic infos of the new file, including the `anchorHash`. Ready do be used with governance on Cardano.
+```json
+{
+  "workMode": "sign-cip100",
+  "outFile": "CIP108-example-signed.json",
+  "anchorHash": "8723898521770d095f522a3976f8318128f97ae10b8cd97da0f66dd29f849f80"
+}
+```
+
 <br>
 
-# Canonize mode
+## Verify governance metadata and the author(s) signatures
 
-## Canonize & Hash CIP-100/108/119 governance metadata
+![image](https://github.com/user-attachments/assets/97598a29-70f1-4e95-8f3f-deae8f832fb6)
+
+As we already learned, you can use cardano-signer to sign a governance metadata file with author signatures. This function is doing the verification of such documents.
+
+Lets use the same document that we generated above:
+
+``` console
+cardano-signer verify --cip100 \
+                      --data-file CIP108-example-signed.json \
+                      --json-extended
+``` 
+
+This gives us the following result:
+```json
+{
+  "workMode": "verify-cip100",
+  "result": true,
+  "errorMsg": "",
+  "authors": [
+    {
+      "name": "The great Name",
+      "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9",
+      "signature": "8b579ba2cb9bcb2355e550a67865d56017d4696a4a48f8db5218a92a7f85bb3ddcde13500b89531c68a3f52deb83ca45f1987ea048500e11feee26847cb6b900",
+      "valid": true
+    }
+  ],
+  "canonizedHash": "8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1",
+  "body": {
+    "title": "Example CIP108(+CIP100) metadata",
+    "abstract": "This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...",
+    "motivation": "This must work, should be motivation enough.",
+    "rationale": "Let's keep testing stuff",
+    "references": [
+      {
+        "@type": "Other",
+        "label": "SanchoNet",
+        "uri": "https://sancho.network"
+      }
+    ],
+    "comment": "This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.",
+    "externalUpdates": [
+      {
+        "title": "SPO Scripts",
+        "uri": "https://github.com/gitmachtl/scripts"
+      },
+      {
+        "title": "Koios",
+        "uri": "https://koios.rest"
+      }
+    ]
+  },
+  "canonizedBody": [
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#comment> \"This is an example CIP-108 metadata-file... testing SPO-Scripts, Koios and Co.\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n1 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#externalUpdates> _:c14n3 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#abstract> \"This metadata was generated to test out db-sync, SPO-Scripts, Koios and other tools...\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#motivation> \"This must work, should be motivation enough.\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#rationale> \"Let's keep testing stuff\"@en-us .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#references> _:c14n2 .",
+    "_:c14n0 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#title> \"Example CIP108(+CIP100) metadata\"@en-us .",
+    "_:c14n1 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-title> \"SPO Scripts\"@en-us .",
+    "_:c14n1 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-uri> \"https://github.com/gitmachtl/scripts\"@en-us .",
+    "_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#OtherReference> .",
+    "_:c14n2 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#reference-label> \"SanchoNet\"@en-us .",
+    "_:c14n2 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#reference-uri> \"https://sancho.network\"@en-us .",
+    "_:c14n3 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-title> \"Koios\"@en-us .",
+    "_:c14n3 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#update-uri> \"https://koios.rest\"@en-us .",
+    "_:c14n4 <https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#body> _:c14n0 ."
+  ]
+}
+```
+
+There are some interesting fields to notice:
+* `result` : will be `true` or `false` -> this is an overall check result
+* `errorMsg` : this is a freeform text, describing any found issues in the document
+* `authors` : this is an array of all authors in the document and the signature verification result in the `valid` field
+* `canonizedHash` : this holds the hash of the canonized body
+* `canonizedBody` : this outputs the canonized body in case you wanna use it for debugging. the next function `canonize` below can also directly write out that canonized body for further usage.
+
+<br>
+
+## Canonize & Hash the body of governance metadata
 
 ![image](https://github.com/user-attachments/assets/9fe8403d-e43d-4469-9466-5ee7c07cacb0)
 
@@ -1222,9 +1412,12 @@ Output - Hash of the canonized body content(hex) :
 ```
 8b5db60af5d673fcff7c352db569bff595c3279d3db23f2b607607bd694496d1
 ```
-You can generate a nice json output via the `--json` or `--json-extended` flag
+
+You can also generate a nice json output via the `--json` or `--json-extended` flag
 ``` console
-cardano-signer canonize --cip100 --data-file CIP108-example.json --json-extended
+cardano-signer canonize --cip100 \
+                        --data-file CIP108-example.json \
+                        --json-extended
 ```
 ``` json
 {
@@ -1275,9 +1468,12 @@ cardano-signer canonize --cip100 --data-file CIP108-example.json --json-extended
 }
 ```
 
-If you're interested in the raw canonized data, that can be written out to an extra file using the `--out-canonized` parameter like:
+If you're interested in the **raw canonized data**, that can be written out to an extra file using the `--out-canonized` parameter like:
 ``` console
-cardano-signer canonized --cip100 --data-file CIP108-example.json --out-canonized CIP108-example.canonized --json-extended
+cardano-signer canonized --cip100 \
+                         --data-file CIP108-example.json \
+                         --out-canonized CIP108-example.canonized \
+                         --json-extended
 ```
 And of course you can write out the plaintext or json output also directly to a file like with the other functions. This is simply done by using the `--out-file` parameter.
 
