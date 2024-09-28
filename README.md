@@ -1470,7 +1470,7 @@ cardano-signer canonize --cip100 \
 
 If you're interested in the **raw canonized data**, that can be written out to an extra file using the `--out-canonized` parameter like:
 ``` console
-cardano-signer canonized --cip100 \
+cardano-signer canonize --cip100 \
                          --data-file CIP108-example.json \
                          --out-canonized CIP108-example.canonized \
                          --json-extended
