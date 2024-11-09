@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.19.0"
+const version = "1.20.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -16,8 +16,8 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace'], //all booleans are set to false per default
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
@@ -173,13 +173,17 @@ switch (topic) {
 
 	case 'keygen':
 	case 'keygen-cip36':
+	case 'keygen-ledger':
+	case 'keygen-trezor':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Generate Cardano ed25519/ed25519-extended keys:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}keygen${Reset}`);
 		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
-		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot${Reset}`);
+		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot, --path pool${Reset}`);
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
+		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
+		console.log(`           [${FgGreen}--ledger | --trezor${Reset}] 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
 		console.log(`           [${FgGreen}--vkey-extended${Reset}] 					${Dim}optional flag to generate a 64byte publicKey with chain code${Reset}`);
@@ -249,7 +253,6 @@ function trimMnemonic(s){
         s = s.replace(/\n /,"\n");              // exclude newline with a start spacing
         return s;
 }
-
 
 function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json, a direct hex entry or a bech-string  // returns a hexstring of the key
 
@@ -468,6 +471,66 @@ function getHash(content, digestLengthBytes = 32) { //hashes a given hex-string 
 }
 
 
+// Some cryptographic helper functions especially for ledger and trezor derivation method
+function generateIcarusMasterKey(entropy, passphrase) {
+        const xprv = crypto.pbkdf2Sync(passphrase,entropy,4096,96,'sha512')
+        xprv[0]  &= 0b1111_1000; // clear the lowest 3 bits
+        xprv[31] &= 0b0001_1111; // clear the highest 3 bits
+        xprv[31] |= 0b0100_0000; // set the 2nd higest bit
+        return xprv;
+}
+
+function generateLedgerMasterKey(mnemonic, passphrase) {
+        const masterSeed = crypto.pbkdf2Sync(mnemonic,"mnemonic" + passphrase,2048,64,'sha512')
+        const message = new Uint8Array([1, ...masterSeed])  // mirror Adrestia's code bug "1"+seed
+        const cc = crypto.createHmac('sha256',"ed25519 seed")
+                .update(message)
+                .digest()
+	const tweakedHash = hmacRecursive(masterSeed)
+        tweakedHash[0]  &= 0b1111_1000; // clear the lowest 3 bits
+        tweakedHash[31] &= 0b0111_1111; // clear the highest bit
+        tweakedHash[31] |= 0b0100_0000; // set the 2nd highest bit
+        var xprv = new Uint8Array([...tweakedHash, ...cc])
+        return xprv;
+}
+
+function hmacRecursive(message) {
+        var hmac = crypto.createHmac('sha512',"ed25519 seed")
+                .update(message)
+                .digest()
+
+        if (hmac[31] & 0b0010_0000) {
+                return hmacRecursive(hmac);
+        }
+        return hmac;
+}
+
+function leftPad(str, padString, length) {
+        while (str.length < length) {
+                str = padString + str;
+        }
+        return str;
+}
+
+function binaryToByte(bin) {
+        return parseInt(bin, 2);
+}
+
+function bytesToBinary(bytes) {
+        return bytes.map((x) => leftPad(x.toString(2), '0', 8)).join('');
+}
+
+function deriveChecksumBits(entropyBuffer) {
+        const ENT = entropyBuffer.length * 8;
+        const CS = ENT / 32;
+        const hash = crypto.createHash('sha256')
+                .update(entropyBuffer)
+                .digest();
+        return bytesToBinary(Array.from(hash)).slice(0, CS);
+}
+
+
+
 
 // MAIN
 //
@@ -501,6 +564,12 @@ async function main() {
 
 	//CIP100-Flag-Check
         if ( args['cip100'] === true ) {workMode = workMode + '-cip100'}
+
+	//LEDGER-Flag-Check
+        if ( args['ledger'] === true ) {workMode = workMode + '-ledger'}
+
+	//TREZOR-Flag-Check
+        if ( args['trezor'] === true ) {workMode = workMode + '-trezor'}
 
 	//show usage for the workMode
 	if ( args['help'] === true ) { showUsage(workMode); }
@@ -1376,9 +1445,13 @@ async function main() {
 
                 case "keygen":  //KEY GENERATION
                 case "keygen-cip36":
+                case "keygen-ledger":
+                case "keygen-trezor":
 
 			//setup
-			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '', ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '', prvKeyBech = '', pubKeyBech = '';
+			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '';
+			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
+			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1393,6 +1466,7 @@ async function main() {
 					case 'DREP': derivation_path = '1852H/1815H/0H/3/0'; break;
 					case 'CC-COLD': derivation_path = '1852H/1815H/0H/4/0'; break;
 					case 'CC-HOT': derivation_path = '1852H/1815H/0H/5/0'; break;
+					case 'POOL': derivation_path = '1853H/1815H/0H/0H'; break;
 				}
 
 				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
@@ -1408,7 +1482,7 @@ async function main() {
 
 			//get mnemonics parameter, if ok set the mnemonics variable
 			var mnemonics = args['mnemonics'];
-		        if ( typeof mnemonics === 'string' && mnemonics != '' ) { //ok, a path was provided let check
+		        if ( typeof mnemonics === 'string' && mnemonics != '' ) { //ok, mnemonics were provided let check
 				mnemonics = trimMnemonic(mnemonics.toLowerCase());
 				var mnemonicsWordCount = wordCount(mnemonics);
 				if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: Please provide between 12 and 24 words for the --mnemonics.`); process.exit(1); }
@@ -1418,13 +1492,20 @@ async function main() {
 					var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
 				} catch (error) { console.error(`Error: The provided mnemonics are not valid, please check the correct spelling. '${error}'`); process.exit(1); }
 
-				//set the derivation path to the default if not already set before
+				//set the derivation path to the default if not already set before -> users expect that if you provide mnemonics that they are used. otherwise a normal "underived" keypair would be created
 				if ( derivation_path == '' ) { derivation_path = '1852H/1815H/0H/0/0'; }
 
 			} else { //no mnemonics provided, generate a random entropy and get the mnemonics from it
+
 				var entropy = crypto.randomBytes(32); //new random entropy
 				var mnemonics = bip39.entropyToMnemonic(entropy); //get the mnemonics from the entropy
+				var mnemonicsWordCount = wordCount(mnemonics);
+
 			}
+
+			//check about a given extra passphrase
+			var passphrase = args['passphrase'];
+		        if ( typeof passphrase !== 'string' ) { passphrase = '' };
 
 			//if there is no derivation_path set, than a simple normal ed25519 key (not derived) is requested
 			if ( derivation_path == '' ) { //generate a simple ed25519 keypair
@@ -1436,11 +1517,53 @@ async function main() {
 				} catch (error) { console.error(`Error: Could not generate a new ed25519 keypair. '${error}'`); process.exit(1); }
 				var entropy = '', mnemonics = '';
 
-			} else { //derivation path is present
+			} else { //derivation path is present, so we derive the rootKey via mnemonics
 
-				try {
-					var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics)
-				} catch (error) { console.error(`Error: Could not generate the rootKey from the entropy/mnemonic. '${error}'`); process.exit(1); }
+					switch (workMode) {
+
+						case "keygen-ledger": 	// generate a rootkey via ledger derivation method
+									//console.log(`Generating rootkey from ledger method`);
+									try {
+										var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(generateLedgerMasterKey(mnemonics, passphrase));
+									} catch (error) { console.error(`Error: Could not generate the rootKey for ledger type mnemonics. '${error}'`); process.exit(1); }
+									derivation_type = 'ledger';
+									break;
+
+						case "keygen-trezor": 	// generate a rootkey via trezor derivation method
+									//console.log(`Generating rootkey from trezor method`);
+									switch (mnemonicsWordCount) {
+										case 12:
+										case 15:
+										case 18: 	//for 12,15 or 18 words the derivation type of trezor is the normal icarus
+												try {
+													var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
+												} catch (error) { console.error(`Error: Could not generate the rootKey for trezor type 12/15/18words mnemonic. '${error}'`); process.exit(1); }
+												derivation_type = 'icarus';
+												break;
+
+										case 24:	//for 24 words we have to deal with the trezor-bug first
+												try {
+													var newentropy = new Uint8Array([...entropy,binaryToByte(deriveChecksumBits(entropy))])
+													var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(newentropy, passphrase));
+												} catch (error) { console.error(`Error: Could not generate the rootKey for trezor type 24words mnemonic. '${error}'`); process.exit(1); }
+												derivation_type = 'trezor';
+												break;
+
+										default:	// there are only 12,15,18 or 24 words allowed with trezor, throw an error otherwise
+												console.error(`Error: Could not generate the rootKey for icarus/normal type from the entropy/mnemonic. '${error}'`); process.exit(1);
+												break;
+									}
+									break;
+
+						default:	// defaults to normal icarus (wallet) derivation method
+								try {
+									var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics)
+								} catch (error) { console.error(`Error: Could not generate the rootKey for icarus/normal type from the entropy/mnemonic. '${error}'`); process.exit(1); }
+								derivation_type = 'icarus';
+								break;
+					}
+
+				//console.log(`rootKey = ` + Buffer.from(rootKey.as_bytes()).toString('hex'));
 
 				var pathArray = derivation_path.split('/');
 				pathArray.forEach( (element, index) => {
@@ -1613,6 +1736,25 @@ async function main() {
 					break;
 
 
+				case '1853H/1815H': //pool keys
+
+					var skeyContent = `{ "type": "StakePoolExtendedSigningKey_ed25519_bip32", "description": "Stake Pool Operator Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					if ( args['vkey-extended'] === true ) {
+						var vkeyContent = `{ "type": "StakePoolExtendedVerificationKey_ed25519_bip32", "description": "Stake Pool Operator Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					} else {
+						var vkeyContent = `{ "type": "StakePoolVerificationKey_ed25519", "description": "Stake Pool Operator Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					}
+
+					//also generate the pool id in hex and bech format
+					var poolIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+					var poolIdBech = bech32.encode("pool", bech32.toWords(Buffer.from(poolIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
+					//generate the keys also in bech format
+					var prvKeyBech = bech32.encode("pool_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+					var pubKeyBech = bech32.encode("pool_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
+					break;
+
+
 				default: //generic ones
 
 					var skeyContent = `{ "type": "ExtendedSigningKeyShelley_ed25519_bip32", "description": "Signing Key", "cborHex": "${prvKeyCbor}" }`;
@@ -1626,14 +1768,17 @@ async function main() {
 				var content = `{ "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}" }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var content = `{ "workMode": "${workMode}"`
-				if ( derivation_path != '' ) { content += `, "path": "${derivation_path}"`; }
+				if ( derivation_path != '' ) { content += `, "derivationPath": "${derivation_path}"`; }
+				if ( derivation_type != '' ) { content += `, "derivationType": "${derivation_type}"`; }
 				if ( vote_purpose > -1 ) { content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`; }
 				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
+				if ( passphrase != '' ) { content += `, "passphrase": "${passphrase}"`; }
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
 				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}"`; }
 				else if ( ccColdIdHex != '' ) { content += `, "ccColdIdHex": "${ccColdIdHex}", "ccColdIdBech": "${ccColdIdBech}"`; }
 				else if ( ccHotIdHex != '' ) { content += `, "ccHotIdHex": "${ccHotIdHex}", "ccHotIdBech": "${ccHotIdBech}"`; }
+				else if ( poolIdHex != '' ) { content += `, "poolIdHex": "${poolIdHex}", "poolIdBech": "${poolIdBech}"`; }
 				if ( prvKeyBech != '' ) { content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`; }
 				content += `, "output": { "skey": ${skeyContent}, "vkey": ${vkeyContent} } }`
 			} else { //generate content in text format
