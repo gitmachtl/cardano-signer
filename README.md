@@ -1,4 +1,4 @@
-# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119
+# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from (Hardware)-Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -28,7 +28,7 @@
 * **[Default mode](#default-mode)**: Sign and verify data with ed25519(cardano) keys
 * **[CIP-8 / CIP-30 mode](#cip-8--cip-30-mode)**: COSE_Sign1 signature & COSE_Key publicKey generation/verification
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
-* **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths
+* **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths, also from Ledger/Trezor-HardwareWallets
 * **[CIP-100 / CIP-108 / CIP-119 mode](#cip-100--cip-108--cip-119-mode)**: Sign, Verify and Canonize governance metadata
 &nbsp;<p>
 
@@ -822,7 +822,7 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 # KeyGeneration mode
 
-![image](https://github.com/gitmachtl/cardano-signer/assets/47434720/5452fc14-b067-4006-af94-bc6589a1ba49)
+![image](https://github.com/user-attachments/assets/ffc1ab3b-338f-4042-a4bc-8e170e1a61f4)
 
 ## *Normal ed25519 keypair without derivation-path/mnemonics*
 
@@ -885,7 +885,7 @@ This generates the typical .skey/.vkey files with content like
 
 <br>
 
-## *ed25519-extended keys with a derivation-path*
+## *ed25519-extended keys with a derivation-path* 
 
 ### Generate a keypair from the standard payment path
 ``` console
@@ -950,6 +950,44 @@ This generates the typical .skey/.vkey files with content like
   "cborHex": "5820a74b785851b0d36b8add6dc24d94112fe18e9fa4e60cc0e420002f77b5ce8148"
 }
 ```
+
+<br>
+
+## Generate a keypair from Hardware-Wallet Mnemonics
+
+``` console
+cardano-signer keygen \
+	--path payment \
+	--mnemonics "snap siege fatal leopard label thunder rely trap robot identify someone exclude glance spring right rude tower pluck explain mouse scheme sister onion include" \
+	--ledger \
+	--json-extended
+```
+Output - JSON Format:
+``` json
+{
+  "workMode": "keygen-ledger",
+  "derivationPath": "1852H/1815H/0H/0/0",
+  "derivationType": "ledger",
+  "mnemonics": "snap siege fatal leopard label thunder rely trap robot identify someone exclude glance spring right rude tower pluck explain mouse scheme sister onion include",
+  "secretKey": "f80ad0a24e08aaa39136ae52ab007b0e3b9d1d593b3d170fcaa61a322fcdb95d5e3a846ea94ebbf22ac5ab64abd7583404762bb3850f4c3362a46226ee92eec94c0ffded554c9a6eda379450af9f38640f87aff455129f679996e056697d4190a00c5bcb331ad60daf8b5b0a3fe6dfa2ec48c546f6290a9787cadd566807eb91",
+  "publicKey": "4c0ffded554c9a6eda379450af9f38640f87aff455129f679996e056697d4190",
+  "XpubKeyHex": "58c80020cc2e6c99e801f6caaa296381673c7ea8aed92cb14b5229dc7434acc97c04b33d3aa811847957f4f82965e7d4e2a7273b67f251c22bfca5dcdfd44c03",
+  "XpubKeyBech": "xpub1tryqqgxv9ekfn6qp7m9252trs9nncl4g4mvjev2t2g5acap54nyhcp9n85a2syvy09tlf7pfvhnafc48yuak0uj3cg4lefwuml2ycqc3457ta",
+  "output": {
+    "skey": {
+      "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
+      "description": "Payment Signing Key",
+      "cborHex": "5880f80ad0a24e08aaa39136ae52ab007b0e3b9d1d593b3d170fcaa61a322fcdb95d5e3a846ea94ebbf22ac5ab64abd7583404762bb3850f4c3362a46226ee92eec94c0ffded554c9a6eda379450af9f38640f87aff455129f679996e056697d4190a00c5bcb331ad60daf8b5b0a3fe6dfa2ec48c546f6290a9787cadd566807eb91"
+    },
+    "vkey": {
+      "type": "PaymentVerificationKeyShelley_ed25519",
+      "description": "Payment Verification Key",
+      "cborHex": "58204c0ffded554c9a6eda379450af9f38640f87aff455129f679996e056697d4190"
+    }
+  }
+}
+```
+As you can see, this generates a new keypair from the given mnemonics. In this example just a standard payment keypair. The used derivation type was set to `Ledger` hardware wallet. 
 
 <br>
 
