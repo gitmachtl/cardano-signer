@@ -9,6 +9,7 @@
 * Sign payloads in **CIP-8 / CIP-30** mode, hashed or not hashed, with or without a payload in the output. The signing output is a COSE_Sign1 signature in hex format and also the public key of the provided secret key for verification. The output can also be set to be in json format which will also show additional data (--json-extended).
 * Generate and sign **Catalyst registration/delegation/deregistration** metadata in **CIP-36** mode. This also includes relatively weighted voting power delegation. The output is the registration/delegation or deregistraton data in json or cborHex-format and/or a binary cbor file, which can be transmitted on chain as it is.
 * Generate **Cardano Keys** like .skey/.vkey files and hex-keys from **derivation paths**, with or without **mnemonic words**.
+* Support for **Hardware-Wallet** derivation types **Ledger & Trezor**.
 * Generate conway **dRep Keys, Constitutional Commitee Member Cold/Hot Keys** with or without **mnemonic words**.
 * Canonized & Hash CIP-100/108/119 governance metadata jsonld data
 * Sign CIP-100/108/119 governacne metadata by adding an authors signature to the document
@@ -37,7 +38,7 @@
 
 $ cardano-signer help
 
-cardano-signer 1.19.0
+cardano-signer 1.20.0
 
 Sign a hex/text-string or a binary-file:
 
@@ -141,8 +142,10 @@ Generate Cardano ed25519/ed25519-extended keys:
 
    Syntax: cardano-signer keygen
    Params: [--path "<derivationpath>"]                          optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"
-                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot
+                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot, --path pool
            [--mnemonics "word1 word2 ... word24"]               optional mnemonic words to derive the key from (separate via space)
+           [--passphrase "passphrase"]                          optional passphrase for --ledger or --trezor derivation method
+           [--ledger | --trezor]                                optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet
            [--cip36]                                            optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)
            [--vote-purpose <unsigned_int>]                      optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)
            [--vkey-extended]                                    optional flag to generate a 64byte publicKey with chain code
@@ -894,7 +897,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1852H/1815H/0H/0/0",
+  "derivationPath": "1852H/1815H/0H/0/0",
+  "derivationType": "icarus",
   "mnemonics": "snap siege fatal leopard label thunder rely trap robot identify someone exclude glance spring right rude tower pluck explain mouse scheme sister onion include",
   "secretKey": "60f0a79e0776b4063d7bff8ada6a37b5fb79168d5e844b51e45fa5088eac6558f858251fdfd2fc55488fceb448c5d8f5d1c93cea5505df05efed86efd90ded6d4db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf52479eeb435bd154d50e80b2980900ac2d8237408ae373daf68d19b6013f5fcd2ef2",
   "publicKey": "4db6843876f0154e7d5ab14ddec3dacb353b44d38b9a5a03bde142b5cedf5247",
@@ -961,7 +965,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen-cip36",
-  "path": "1694H/1815H/0H/0/0",
+  "derivationPath": "1694H/1815H/0H/0/0",
+  "derivationType": "icarus",
   "votePurpose": "Catalyst (0)",
   "mnemonics": "sudden release husband tone know ladder couple timber another human horn humble exit gift depth green aspect annual crawl final garage innocent cluster aisle",
   "secretKey": "38483eb792e0e4daa12a317ffdeaddd72b3dfde549ee174ecaabf14173bb315dbe3f42605e7400f1616a73a4c08b7f6a89d3e3da87adab9c5e8571bc58bf32d336fdc791592d144da05165c89323c98078d4a888bf4d6e4e146192493d23a065e31ab5741b2180735bd168d2d1a0911e874beb32651f7519733444f3df8bc956",
@@ -1005,7 +1010,7 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1694H/1815H/0H/0/0",
+  "derivationPath": "1694H/1815H/0H/0/0",
   "votePurpose": "Catalyst (0)",
   "mnemonics": "noise dad blood spell fiber valley pact dial nest arrow umbrella addict skill excuse duty hover lyrics enrich now zebra draft sample city hair",
   "secretKey": "106c158474bf7cc634bd4368c69d83a0d9930fbb8036f4905beec7b5f82e6547ad08887117afa7c7fb452e831c1c157d53168b5ccf2a349964485be877d69cf88f1c138a9a1d9c54c38881cdd46aeaf7b409c2dab30d168344934d34299a6dea5744838cd3d3916f0cda808bb91f512162cc58be3ca9b87cb4b69db7e5558861",
@@ -1043,7 +1048,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1852H/1815H/0H/3/0",
+  "derivationPath": "1852H/1815H/0H/3/0",
+  "derivationType": "icarus",
   "mnemonics": "spirit poverty boring zero banner argue cream bag damage menu purity project scatter harsh moment exit tribe security autumn bar olive defy slight mirror",
   "secretKey": "00ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
   "publicKey": "395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af",
@@ -1089,7 +1095,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1852H/1815H/0H/3/0",
+  "derivationPath": "1852H/1815H/0H/3/0",
+  "derivationType": "icarus",
   "mnemonics": "spirit poverty boring zero banner argue cream bag damage menu purity project scatter harsh moment exit tribe security autumn bar olive defy slight mirror",
   "secretKey": "00ff6013126074c9cfa811c3b7fe02c92d90b7eab4917067043b83f11a9cff4aab46e483282e058b8626a21441c337b26124d2d6cdf9ad8cf90ed179a74c5381395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
   "publicKey": "395392af20002accd13ca5e4fe1860882ebe2f7f736f7004e39512feb25241af9ee678410593fb9a10d10f21b18457502bfb578d168acfb9bf7418a662bf17bd",
@@ -1128,7 +1135,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1852H/1815H/0H/4/0",
+  "derivationPath": "1852H/1815H/0H/4/0",
+  "derivationType": "icarus",
   "mnemonics": "cotton thunder useful social state soft engage member rent subject kite earn forget robot coral depart future betray seed bag acquire enlist time primary",
   "secretKey": "f07d70ee6fe6319bc265256077570a59b715312cf3c268547b7c4da966bc9e5568a67ca09e0f2ccbbbdd4b7c8563bb2e51529da43f2b77fe6db02371aa6dfba168c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093addcc291d29055a5407e99dcfce83436cf9369a09919bf5e653c680b6b418159",
   "publicKey": "68c0ddf7e28f4a1060db367e1b3ec8dc1fa2c6eee2c9e92a7a45f0f4d026b093",
@@ -1172,7 +1180,8 @@ Output - JSON Format:
 ``` json
 {
   "workMode": "keygen",
-  "path": "1852H/1815H/0H/5/0",
+  "derivationPath": "1852H/1815H/0H/5/0",
+  "derivationType": "icarus",
   "mnemonics": "knock advance olympic table pride melody cause kick govern pass manual liberty warfare zero now meat confirm chronic amount powder three limb patient ball",
   "secretKey": "401299d0380dec82d938092673de937c634338976bd246b86b9ddcd69838b654b87c0afa9d08df7bbfec137e8b2f98e48de0c01225f7b278b37efad1dfbbaefc344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a093bca3010d9dadba7489f0f5ec9a7a43239b06326e9fbb3d7685ecf719b90738",
   "publicKey": "344ece677d4931d596210917c7ba6125b6253dd4431a0c886369555235f385a0",
@@ -1485,6 +1494,20 @@ And of course you can write out the plaintext or json output also directly to a 
 <br>
 
 ## Release Notes / Change-Logs
+
+* **1.20.0**
+  #### NEW FUNCTION - Derive keys from Hardware-Wallet mnemonics
+     - Two new flags have been added to the `keygen` mode:
+		- `--ledger` let you derive your keys in Ledger-Hardware-Wallet type format
+		- `--trezor` let you derive your keys in Trezor-Hardware-Wallet type format
+  
+  This new function allows to recover keys from a Hardware-Wallet as pure CLI-Keys.
+  
+  #### UPDATE/CHANGES:
+     - The preset path `--path pool` has been added to the `keygen` mode, to directly derive Cardano-Pool Cold-Keys
+	 - The `path` entry in the `--json-extended` output for the `keygen` mode was renamed into `derivationPath` (breaking!)
+	 - A new entry was added in the `--json-extended` output for the `keygen` mode -> `derivationType`, which can be `icarus`, `ledger` or `trezor`
+	 - If keys are derived for `--path drep` or `--path pool`, the output now also contains the corresponding DRep-ID/Pool-ID.
 
 * **1.19.0**
   #### NEW FUNCTION - Adding authors signatures for CIP100 JSONLD metadata
