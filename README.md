@@ -1533,6 +1533,10 @@ And of course you can write out the plaintext or json output also directly to a 
 
 ## Release Notes / Change-Logs
 
+* **1.20.1**
+  #### CIP100 Verification and Canonize 
+    - Bugfix: Corrected a bug where doublequotes that are already escaped in the body content to form the canonized body array were escaped again.
+
 * **1.20.0**
   #### NEW FUNCTION - Derive keys from Hardware-Wallet mnemonics
      - Two new flags have been added to the `keygen` mode:
