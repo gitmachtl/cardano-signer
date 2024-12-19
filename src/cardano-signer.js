@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.20.0"
+const version = "1.20.1"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -475,8 +475,8 @@ function getHash(content, digestLengthBytes = 32) { //hashes a given hex-string 
 function generateIcarusMasterKey(entropy, passphrase) {
         const xprv = crypto.pbkdf2Sync(passphrase,entropy,4096,96,'sha512')
         xprv[0]  &= 0b1111_1000; // clear the lowest 3 bits
-        xprv[31] &= 0b0001_1111; // clear the highest 3 bits
-        xprv[31] |= 0b0100_0000; // set the 2nd higest bit
+        xprv[31] &= 0b0001_1111; // clear the highest 3 bits  (actually its 'clear the highest bit, clear the 3rd highest bit. but as we also set the 2nd highest bit, we can do it all at once)
+        xprv[31] |= 0b0100_0000; // set the 2nd highest bit
         return xprv;
 }
 
@@ -1872,7 +1872,7 @@ async function main() {
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
-							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
+							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
 						})
 						var content = `{ "workMode": "${workMode}", "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
@@ -1992,7 +1992,7 @@ async function main() {
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
-							canonized_array.push('"' + String(element).replace(/[\"]/g, '\\"') + '"'); //replace the " with a \" while pushing new elements to the array
+							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
 						})
 						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
