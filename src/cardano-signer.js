@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.20.1"
+const version = "1.22.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -108,7 +108,7 @@ switch (topic) {
 
 	case 'sign-cip100':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors):${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519 algorithm):${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
@@ -150,7 +150,6 @@ switch (topic) {
 		console.log(`								${Dim}optional data/payload/file if not present in the COSE_Sign1 signature${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional signing-address to do the verification with${Reset}`);
 		console.log(`           [${FgGreen}--nohashcheck${Reset}]					${Dim}optional flag to not perform a check that the public-key belongs to the address/hash${Reset}`);
-		console.log(`           [${FgGreen}--hashed${Reset}]						${Dim}optional flag to hash the payload given via the 'data' parameters${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"true/false" (exitcode 0/1)${Reset} or ${FgCyan}JSON-Format${Reset}`)
@@ -159,7 +158,7 @@ switch (topic) {
 
 	case 'verify-cip100':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Verify Signatures in CIP-100 governance JSON-LD metadata:${Reset}`)
+	        console.log(`${Bright}${Underscore}Verify Signatures in CIP-100/108/119/136 governance JSON-LD metadata:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
@@ -527,6 +526,214 @@ function deriveChecksumBits(entropyBuffer) {
                 .update(entropyBuffer)
                 .digest();
         return bytesToBinary(Array.from(hash)).slice(0, CS);
+}
+
+
+
+// VERIFY CIP8/30 FUNCTION -> coded as a function so it can be reused within other functions
+function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(3)) { //default calling arguments are the same as calling the main process - can be modified by subfunctions
+
+			var sub_args = require('minimist')(calling_args,parse_options);
+
+			//get optional payload_data_hex to use in case there is no payload present in the COSE_Sign1 signature
+			var data_hex = sub_args['data-hex'];
+		        if ( typeof data_hex === 'string' ) { // a nullstring is also ok
+				//data-hex is present, lets trim it, convert it to lowercase
+			        var payload_data_hex = trimString(data_hex.toLowerCase());
+				//check that the given data is a hex string, skip the test if its empty. a nullstring is ok
+				if ( payload_data_hex != '' && ! regExpHex.test(payload_data_hex) ) { throw {'msg': `Data is not a valid hex string`}; }
+			}
+
+
+			if ( ! payload_data_hex ) { //no payload_data_hex present, lets try the data-file parameter
+				var payload_data_file = sub_args['data-file'];
+			        if ( typeof payload_data_file === 'string' && payload_data_file != '' ) {
+					//data-file present lets read the file and store it hex encoded in payload_data_hex
+						try {
+							var payload_data_hex = fs.readFileSync(payload_data_file,null).toString('hex'); //reads the file as binary
+						} catch (error) { throw {'msg': `Can't read data-file '${payload_data_file}'`}; }
+				}
+			}
+
+			if ( ! payload_data_hex ) { //no payload_data_hex present, lets try the data (data-hex) parameter
+				var payload_data = sub_args['data'];
+			        if ( typeof payload_data === 'string' ) { // a nullstring is also ok
+					//data parameter present, lets convert it to hex and store it in the payload_data_hex variable
+					var payload_data_hex = Buffer.from(payload_data).toString('hex');
+				}
+			}
+
+			//there might be a payload_data_hex preset now, or it is 'undefined' if not provided via the optional data parameters
+
+
+			//get the COSE_Key to verify
+			var COSE_Key_cbor_hex = sub_args['cose-key'];
+		        if ( typeof COSE_Key_cbor_hex === 'undefined' || COSE_Key_cbor_hex === true ) { throw {'msg': `Missing COSE_Key parameter --cose-key`, 'showUsage': workMode}; }
+			COSE_Key_cbor_hex = trimString(COSE_Key_cbor_hex.toLowerCase());
+
+			//check that COSE_Key_cbor_hex is a valid hex string before passing it on to the cbor decoding
+			if ( ! regExpHex.test(COSE_Key_cbor_hex) ) { throw {'msg': `COSE_Key is not a valid hex string`}; }
+
+			//cbor decode the COSE_Key_cbor_hex into the COSE_Key_structure
+			try {
+				var COSE_Key_structure = cbor.decode(COSE_Key_cbor_hex)
+			} catch (error) { throw {'msg': `Can't cbor decode the given COSE_Key signature (${error})`}; }
+
+			//do a sanity check on the decoded COSE_Key_structure
+			if ( ! COSE_Key_structure instanceof Map || COSE_Key_structure.size < 4 ) { throw {'msg': `COSE_Key is not valid. It must be a map with at least 4 entries: kty,alg,crv,x.`}; }
+			else if ( COSE_Key_structure.get(1) != 1 ) { throw {'msg': `COSE_Key map label '1' (kty) is not '1' (OKP)`}; }
+			else if ( COSE_Key_structure.get(3) != -8 ) { throw {'msg': `COSE_Key map label '3' (alg) is not '-8' (EdDSA)`}; }
+			else if ( COSE_Key_structure.get(-1) != 6 ) { throw {'msg': `COSE_Key map label '-1' (crv) is not '6' (Ed25519)`}; }
+			else if ( ! COSE_Key_structure.has(-2) ) { throw {'msg': `COSE_Key map label '-2' (public key) is missing`}; }
+
+			//get the publickey
+			var pubKey_buffer =  COSE_Key_structure.get(-2);
+			if ( ! Buffer.isBuffer(pubKey_buffer) ) { throw {'msg': `PublicKey entry in the COSE_Key is not a bytearray`}; }
+			var pubKey = pubKey_buffer.toString('hex')
+
+			//load the publickey
+			try {
+			var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(pubKey,'hex'));
+			} catch (error) { throw {'msg': `${error}`}; }
+
+			//get the COSE_Sign1 signature to verify
+			var COSE_Sign1_cbor_hex = sub_args['cose-sign1'];
+		        if ( typeof COSE_Sign1_cbor_hex === 'undefined' || COSE_Sign1_cbor_hex === true ) { throw {'msg': `Missing COSE_Sign1 signature parameter --cose-sign1`, 'showUsage': workMode}; }
+			COSE_Sign1_cbor_hex = trimString(COSE_Sign1_cbor_hex.toLowerCase());
+
+			//check that COSE_Sign1_cbor_hex is a valid hex string before passing it on to the cbor decoding
+			if ( ! regExpHex.test(COSE_Sign1_cbor_hex) ) { throw {'msg': `COSE_Sign1 is not a valid hex string`}; }
+
+			//cbor decode the COSE_Sign1_cbor_hex into the COSE_Sign1_structure
+			try {
+				var COSE_Sign1_structure = cbor.decode(COSE_Sign1_cbor_hex)
+			} catch (error) { throw {'msg': `Can't cbor decode the given COSE_Sign1 signature (${error})`}; }
+
+			//do a sanity check on the decoded COSE_Sign1_structure
+			if ( COSE_Sign1_structure instanceof Array == false || COSE_Sign1_structure.length != 4 ) { throw {'msg': `COSE_Sign1 is not a valid signature. It must be an array with 4 entries.`}; }
+
+			//extract the content: protectedHeader, unprotectedHeader, payload, signature
+			//
+			// 1) protectedHeader
+
+				var protectedHeader_buffer = COSE_Sign1_structure[0];
+				if ( ! Buffer.isBuffer(protectedHeader_buffer) ) { throw {'msg': `Protected header is not a bytearray (serialized) cbor`}; }
+				//cbor decode the protectedHeader_cbor_hex into protectedHeader
+				try {
+					var protectedHeader = cbor.decode(protectedHeader_buffer)
+				} catch (error) { throw {'msg': `Can't cbor decode the protected header (${error})`}; }
+
+				//extract the content and do a check on the map entries
+				if ( ! protectedHeader.has(1) ) { throw {'msg': `Protected header map label '1' is missing`}; }
+				else if ( protectedHeader.get(1) != -8 ) { throw {'msg': `Protected header map label '1' (alg) is not '-8' (EdDSA)`}; }
+				else if ( ! protectedHeader.has('address') ) { throw {'msg': `Protected header map label 'address' is missing`}; }
+				var sign_addr_buffer = protectedHeader.get('address');
+				if ( ! Buffer.isBuffer(sign_addr_buffer) ) { throw {'msg': `Protected header map label 'address' invalid`}; }
+
+				//if there is an optional address parameter present, use it instead of the one from the COSE_Sign1 signature
+	                        var address = sub_args['address'];
+	                        if ( typeof address === 'string' ) { //do the check if the parameter is provided
+					//read the address from a file or direct hex/bech
+				        sign_addr = readAddr2hex(address, pubKey);
+		                        //check that the given address belongs to the pubKey
+		                        if ( ( sub_args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+		                                throw {'msg': `The given ${sign_addr.type} address '${sign_addr.addr}' does not belong to the public key in the COSE_Key.`};
+					}
+
+				} else {
+					//read the sign_addr from the protectedHeader
+				        sign_addr = readAddr2hex(sign_addr_buffer.toString('hex'), pubKey);
+		                        //check that the address belongs to the pubKey
+		                        if ( ( sub_args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+		                                throw {'msg': `The ${sign_addr.type} address '${sign_addr.addr}' in the COSE_Sign1 does not belong to the public key in the COSE_Key.`};
+					}
+				}
+
+			// 2) unprotectedHeader -> get the value for the isHashed boolean
+
+				var unprotectedHeader = COSE_Sign1_structure[1];
+				// cbor decode generates an object out of a map if there is only one entry. we want always a map, because there could be more entries
+				if ( unprotectedHeader instanceof Map == false && typeof unprotectedHeader === 'object' ) { // so if it is not a map but an object, convert it
+					var unprotectedHeader = new Map(Object.entries(unprotectedHeader));
+				}
+
+				if ( unprotectedHeader instanceof Map == false ) { // if its not a map now, throw an error
+					throw {'msg': `Unprotected header is not a map`};
+				}
+
+				if ( ! unprotectedHeader.has('hashed') ) { throw {'msg': `Unprotected header label 'hashed' is missing`}; }
+				var isHashed = unprotectedHeader.get('hashed');
+				if ( typeof isHashed !== 'boolean' ) { throw {'msg': `Unprotected header label 'hashed' is not a boolean`}; }
+
+				//if there is already a payload_data_hex present via the optional data parameters, hash it if needed to match the settings in the COSE_Sign1 signature
+				if ( payload_data_hex && isHashed ) { payload_data_hex = getHash(payload_data_hex, 28); } //hash the payload with blake2b_224 (28bytes digest length) }
+
+			// 3) payload
+
+				//if there is no payload_data_hex present via the optional data parameters, use the one in the COSE_Sign1 signature
+				if ( typeof payload_data_hex === 'undefined' ) {
+					var payload_data_buffer = COSE_Sign1_structure[2];
+					if ( Buffer.isBuffer(payload_data_buffer) ) { // payload present, load it into payload_data_hex
+						var payload_data_hex = payload_data_buffer.toString('hex');
+					} else if ( payload_data_buffer == null ) { // payload is missing, and there is also no payload provided via the optional data parameters
+						throw {'msg': `There is no payload present in the COSE_Sign1 signature, please provide a payload via the data / data-hex / data-file parameters`};
+					}
+				}
+
+			// 4) signature
+
+				var signature_buffer = COSE_Sign1_structure[3];
+				if ( ! Buffer.isBuffer(signature_buffer) ) { throw {'msg': `Signature is not a bytearray`}; }
+				var signature_hex = signature_buffer.toString('hex')
+
+				//load the Ed25519Signature
+				try {
+				var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(signature_hex);
+				} catch (error) { throw {'msg': `${error}`}; }
+
+
+			//generate the protectedHeader with the current values (the address within it might have been overwritten by a given one)
+			// alg (1) - must be set to EdDSA (-8)
+			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
+			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
+			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
+
+			//generate the data to verify, as a serialized cbor of the Sig_structure
+			//Sig_structure = [
+			//  context : "Signature" / "Signature1" / "CounterSignature",    ; Signature1 (Sign1) here
+			//  body_protected : empty_or_serialized_map,                     ; protected from layer 1
+			//  ? sign_protected : empty_or_serialized_map,                   ; not present in Sign1 case
+			//  external_aad : bstr,                                          ; empty here
+			//  payload : bstr
+			//  ]
+			var Sig_structure = [ "Signature1", Buffer.from(protectedHeader_cbor_hex,'hex'),Buffer.from(''), Buffer.from(payload_data_hex,'hex') ]
+
+			//convert it to cbor representation
+			Sig_structure_cbor_hex = cbor.encode(Sig_structure).toString('hex');
+
+			//VERIFY
+			var verified = publicKey.verify(Buffer.from(Sig_structure_cbor_hex,'hex'),ed25519signature);
+
+			//compose the content for the output: signature data + public key
+			if ( sub_args['json'] === true ) { //generate content in json format
+				var content = `{ "result": "${verified}" }`;
+			} else if ( sub_args['json-extended'] === true ) { //generate content in json format with additional fields
+				var content = `{ "workMode": "${workMode}", "result": "${verified}", "addressHex": "${sign_addr.hex}", "addressType": "${sign_addr.type}", "addressNetwork": "${sign_addr.network}", `;
+				if ( payload_data_hex.length <= 2000000 ) { content += `"payloadDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex if it is less than 2M of chars
+				content += `"isHashed": "${isHashed}",`;
+				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"verifyDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
+				content += `"signature": "${signature_hex}",`;
+				content += `"publicKey": "${pubKey}" }`
+			} else { //generate content in text format
+				var content = `${verified}`;
+			}
+
+			//return the content, the verified boolean, the error boolean
+			return {
+				'content': content,
+				'verified': verified,
+			}
+
 }
 
 
@@ -1231,214 +1438,29 @@ async function main() {
                 case "verify-cip8":  //VERIFY DATA IN CIP-8 MODE -> currently idential to CIP-30
                 case "verify-cip30":  //VERIFY DATA IN CIP-30 MODE -> CIP-8 structure
 
-			//get optional payload_data_hex to use in case there is no payload present in the COSE_Sign1 signature
-			var data_hex = args['data-hex'];
-		        if ( typeof data_hex === 'string' ) { // a nullstring is also ok
-				//data-hex is present, lets trim it, convert it to lowercase
-			        var payload_data_hex = trimString(data_hex.toLowerCase());
-				//check that the given data is a hex string, skip the test if its empty. a nullstring is ok
-				if ( payload_data_hex != '' && ! regExpHex.test(payload_data_hex) ) { console.error(`Error: Data is not a valid hex string`); process.exit(1); }
-			}
-
-
-			if ( ! payload_data_hex ) { //no payload_data_hex present, lets try the data-file parameter
-				var payload_data_file = args['data-file'];
-			        if ( typeof payload_data_file === 'string' && payload_data_file != '' ) {
-					//data-file present lets read the file and store it hex encoded in payload_data_hex
-						try {
-							var payload_data_hex = fs.readFileSync(payload_data_file,null).toString('hex'); //reads the file as binary
-						} catch (error) { console.error(`Error: Can't read data-file '${payload_data_file}'`); process.exit(1); }
-				}
-			}
-
-			if ( ! payload_data_hex ) { //no payload_data_hex present, lets try the data (data-hex) parameter
-				var payload_data = args['data'];
-			        if ( typeof payload_data === 'string' ) { // a nullstring is also ok
-					//data parameter present, lets convert it to hex and store it in the payload_data_hex variable
-					var payload_data_hex = Buffer.from(payload_data).toString('hex');
-				}
-			}
-
-			//there might be a payload_data_hex preset now, or it is 'undefined' if not provided via the optional data parameters
-
-
-			//get the COSE_Key to verify
-			var COSE_Key_cbor_hex = args['cose-key'];
-		        if ( typeof COSE_Key_cbor_hex === 'undefined' || COSE_Key_cbor_hex === true ) { console.error(`Error: Missing COSE_Key parameter --cose-key`); showUsage(workMode); }
-			COSE_Key_cbor_hex = trimString(COSE_Key_cbor_hex.toLowerCase());
-
-			//check that COSE_Key_cbor_hex is a valid hex string before passing it on to the cbor decoding
-			if ( ! regExpHex.test(COSE_Key_cbor_hex) ) { console.error(`Error: COSE_Key is not a valid hex string`); process.exit(1); }
-
-			//cbor decode the COSE_Key_cbor_hex into the COSE_Key_structure
+			//call verification subfunction
 			try {
-				var COSE_Key_structure = cbor.decode(COSE_Key_cbor_hex)
-			} catch (error) { console.error(`Error: Can't cbor decode the given COSE_Key signature (${error})`); process.exit(1); }
-
-			//do a sanity check on the decoded COSE_Key_structure
-			if ( ! COSE_Key_structure instanceof Map || COSE_Key_structure.size < 4 ) { console.error(`Error: COSE_Key is not valid. It must be a map with at least 4 entries: kty,alg,crv,x.`); process.exit(1); }
-			else if ( COSE_Key_structure.get(1) != 1 ) { console.error(`Error: COSE_Key map label '1' (kty) is not '1' (OKP)`); process.exit(1); }
-			else if ( COSE_Key_structure.get(3) != -8 ) { console.error(`Error: COSE_Key map label '3' (alg) is not '-8' (EdDSA)`); process.exit(1); }
-			else if ( COSE_Key_structure.get(-1) != 6 ) { console.error(`Error: COSE_Key map label '-1' (crv) is not '6' (Ed25519)`); process.exit(1); }
-			else if ( ! COSE_Key_structure.has(-2) ) { console.error(`Error: COSE_Key map label '-2' (public key) is missing`); process.exit(1); }
-
-			//get the publickey
-			var pubKey_buffer =  COSE_Key_structure.get(-2);
-			if ( ! Buffer.isBuffer(pubKey_buffer) ) { console.error(`Error: PublicKey entry in the COSE_Key is not a bytearray`); process.exit(1); }
-			var pubKey = pubKey_buffer.toString('hex')
-
-			//load the publickey
-			try {
-			var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(pubKey,'hex'));
-			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
-
-			//get the COSE_Sign1 signature to verify
-			var COSE_Sign1_cbor_hex = args['cose-sign1'];
-		        if ( typeof COSE_Sign1_cbor_hex === 'undefined' || COSE_Sign1_cbor_hex === true ) { console.error(`Error: Missing COSE_Sign1 signature parameter --cose-sign1`); showUsage(workMode); }
-			COSE_Sign1_cbor_hex = trimString(COSE_Sign1_cbor_hex.toLowerCase());
-
-			//check that COSE_Sign1_cbor_hex is a valid hex string before passing it on to the cbor decoding
-			if ( ! regExpHex.test(COSE_Sign1_cbor_hex) ) { console.error(`Error: COSE_Sign1 is not a valid hex string`); process.exit(1); }
-
-			//cbor decode the COSE_Sign1_cbor_hex into the COSE_Sign1_structure
-			try {
-				var COSE_Sign1_structure = cbor.decode(COSE_Sign1_cbor_hex)
-			} catch (error) { console.error(`Error: Can't cbor decode the given COSE_Sign1 signature (${error})`); process.exit(1); }
-
-			//do a sanity check on the decoded COSE_Sign1_structure
-			if ( COSE_Sign1_structure instanceof Array == false || COSE_Sign1_structure.length != 4 ) { console.error(`Error: COSE_Sign1 is not a valid signature. It must be an array with 4 entries.`); process.exit(1); }
-
-			//extract the content: protectedHeader, unprotectedHeader, payload, signature
-			//
-			// 1) protectedHeader
-
-				var protectedHeader_buffer = COSE_Sign1_structure[0];
-				if ( ! Buffer.isBuffer(protectedHeader_buffer) ) { console.error(`Error: Protected header is not a bytearray (serialized) cbor`); process.exit(1); }
-				//cbor decode the protectedHeader_cbor_hex into protectedHeader
-				try {
-					var protectedHeader = cbor.decode(protectedHeader_buffer)
-				} catch (error) { console.error(`Error: Can't cbor decode the protected header (${error})`); process.exit(1); }
-
-				//extract the content and do a check on the map entries
-				if ( ! protectedHeader.has(1) ) { console.error(`Error: Protected header map label '1' is missing`); process.exit(1); }
-				else if ( protectedHeader.get(1) != -8 ) { console.error(`Error: Protected header map label '1' (alg) is not '-8' (EdDSA)`); process.exit(1); }
-				else if ( ! protectedHeader.has('address') ) { console.error(`Error: Protected header map label 'address' is missing`); process.exit(1); }
-				var sign_addr_buffer = protectedHeader.get('address');
-				if ( ! Buffer.isBuffer(sign_addr_buffer) ) { console.error(`Error: Protected header map label 'address' invalid`); process.exit(1); }
-
-				//if there is an optional address parameter present, use it instead of the one from the COSE_Sign1 signature
-	                        var address = args['address'];
-	                        if ( typeof address === 'string' ) { //do the check if the parameter is provided
-					//read the address from a file or direct hex/bech
-				        sign_addr = readAddr2hex(address, pubKey);
-		                        //check that the given address belongs to the pubKey
-		                        if ( ( args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
-		                                console.error(`Error: The given ${sign_addr.type} address '${sign_addr.addr}' does not belong to the public key in the COSE_Key.`); process.exit(1);
-					}
-
-				} else {
-					//read the sign_addr from the protectedHeader
-				        sign_addr = readAddr2hex(sign_addr_buffer.toString('hex'), pubKey);
-		                        //check that the address belongs to the pubKey
-		                        if ( ( args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
-		                                console.error(`Error: The ${sign_addr.type} address '${sign_addr.addr}' in the COSE_Sign1 does not belong to the public key in the COSE_Key.`); process.exit(1);
-					}
-				}
-
-			// 2) unprotectedHeader -> get the value for the isHashed boolean
-
-				var unprotectedHeader = COSE_Sign1_structure[1];
-				// cbor decode generates an object out of a map if there is only one entry. we want always a map, because there could be more entries
-				if ( unprotectedHeader instanceof Map == false && typeof unprotectedHeader === 'object' ) { // so if it is not a map but an object, convert it
-					var unprotectedHeader = new Map(Object.entries(unprotectedHeader));
-				}
-
-				if ( unprotectedHeader instanceof Map == false ) { // if its not a map now, throw an error
-					console.error(`Error: Unprotected header is not a map`); process.exit(1);
-				}
-
-				if ( ! unprotectedHeader.has('hashed') ) { console.error(`Error: Unprotected header label 'hashed' is missing`); process.exit(1); }
-				var isHashed = unprotectedHeader.get('hashed');
-				if ( typeof isHashed !== 'boolean' ) { console.error(`Error: Unprotected header label 'hashed' is not a boolean`); process.exit(1); }
-
-				//if there is already a payload_data_hex present via the optional data parameters, hash it if needed to match the settings in the COSE_Sign1 signature
-				if ( payload_data_hex && isHashed ) { payload_data_hex = getHash(payload_data_hex, 28); } //hash the payload with blake2b_224 (28bytes digest length) }
-
-			// 3) payload
-
-				//if there is no payload_data_hex present via the optional data parameters, use the one in the COSE_Sign1 signature
-				if ( typeof payload_data_hex === 'undefined' ) {
-					var payload_data_buffer = COSE_Sign1_structure[2];
-					if ( Buffer.isBuffer(payload_data_buffer) ) { // payload present, load it into payload_data_hex
-						var payload_data_hex = payload_data_buffer.toString('hex');
-					} else if ( payload_data_buffer == null ) { // payload is missing, and there is also no payload provided via the optional data parameters
-						console.error(`Error: There is no payload present in the COSE_Sign1 signature, please provide a payload via the data / data-hex / data-file parameters`); process.exit(1);
-					}
-				}
-
-			// 4) signature
-
-				var signature_buffer = COSE_Sign1_structure[3];
-				if ( ! Buffer.isBuffer(signature_buffer) ) { console.error(`Error: Signature is not a bytearray`); process.exit(1); }
-				var signature_hex = signature_buffer.toString('hex')
-
-				//load the Ed25519Signature
-				try {
-				var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(signature_hex);
-				} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
-
-
-			//generate the protectedHeader with the current values (the address within it might have been overwritten by a given one)
-			// alg (1) - must be set to EdDSA (-8)
-			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
-			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
-			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
-
-			//generate the data to verify, as a serialized cbor of the Sig_structure
-			//Sig_structure = [
-			//  context : "Signature" / "Signature1" / "CounterSignature",    ; Signature1 (Sign1) here
-			//  body_protected : empty_or_serialized_map,                     ; protected from layer 1
-			//  ? sign_protected : empty_or_serialized_map,                   ; not present in Sign1 case
-			//  external_aad : bstr,                                          ; empty here
-			//  payload : bstr
-			//  ]
-			var Sig_structure = [ "Signature1", Buffer.from(protectedHeader_cbor_hex,'hex'),Buffer.from(''), Buffer.from(payload_data_hex,'hex') ]
-
-			//convert it to cbor representation
-			Sig_structure_cbor_hex = cbor.encode(Sig_structure).toString('hex');
-
-			//VERIFY
-			var verified = publicKey.verify(Buffer.from(Sig_structure_cbor_hex,'hex'),ed25519signature);
-
-
-			//compose the content for the output: signature data + public key
-			if ( args['json'] === true ) { //generate content in json format
-				var content = `{ "result": "${verified}" }`;
-			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
-				var content = `{ "workMode": "${workMode}", "result": "${verified}", "addressHex": "${sign_addr.hex}", "addressType": "${sign_addr.type}", "addressNetwork": "${sign_addr.network}", `;
-				if ( payload_data_hex.length <= 2000000 ) { content += `"payloadDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex if it is less than 2M of chars
-				content += `"isHashed": "${isHashed}",`;
-				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"verifyDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
-				content += `"signature": "${signature_hex}",`;
-				content += `"publicKey": "${pubKey}" }`
-			} else { //generate content in text format
-				var content = `${verified}`;
+				var result = verifyCIP8(workMode);  //no extra arguments than `workMode` means that the function takes the parameters from the main process call
+			} catch (error) {
+				console.error(`Error: ${error.msg}`);
+				if ( result.showUsage ) { showUsage(workMode); }
+				process.exit(1);
 			}
 
 			//output the verification result to the console or to a file
 			var out_file = args['out-file'];
 		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
-			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content);} //Output to console
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(result.content);} //Output to console
 			else { //else try to write the content out to the given file
 				try {
-				fs.writeFileSync(out_file,content, 'utf8')
+				fs.writeFileSync(out_file,result.content, 'utf8')
 				// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 
-			//exit with the right exitcode
-			if ( verified ) { process.exit(0); }  //TRUE
-				   else { process.exit(1); }  //FALSE
+			//exit with the right return-code depending on the `verified` boolean
+			if ( result.verified ) { process.exit(0); }  //TRUE
+					  else { process.exit(1); }  //FALSE
 
 			break;
 
@@ -1452,6 +1474,7 @@ async function main() {
 			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
+			var rootKeyHex = '';
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1517,6 +1540,9 @@ async function main() {
 				} catch (error) { console.error(`Error: Could not generate a new ed25519 keypair. '${error}'`); process.exit(1); }
 				var entropy = '', mnemonics = '';
 
+				//store the rootKey in hex format for output later on
+				var rootKeyHex = Buffer.from(rootKey.as_bytes()).toString('hex');
+
 			} else { //derivation path is present, so we derive the rootKey via mnemonics
 
 					switch (workMode) {
@@ -1563,7 +1589,8 @@ async function main() {
 								break;
 					}
 
-				//console.log(`rootKey = ` + Buffer.from(rootKey.as_bytes()).toString('hex'));
+				//store the rootKey in hex format for output later on
+				var rootKeyHex = Buffer.from(rootKey.as_bytes()).toString('hex');
 
 				var pathArray = derivation_path.split('/');
 				pathArray.forEach( (element, index) => {
@@ -1773,6 +1800,7 @@ async function main() {
 				if ( vote_purpose > -1 ) { content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`; }
 				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
 				if ( passphrase != '' ) { content += `, "passphrase": "${passphrase}"`; }
+				if ( rootKeyHex != '' ) { content += `, "rootKey": "${rootKeyHex}"`; }
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
 				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}"`; }
@@ -1901,24 +1929,44 @@ async function main() {
 			var errorStr = '' //will hold an explanation about an error
 			var authors_array = [] //holds the authors for the output with there name and verified field
 
+					//if the input to check was a file, read it in again to also provide the fileHash for it, if something goes wrong, don't show the anchorHash
+				        if ( typeof data_file !== 'undefined' && data_file != '' ) {
+							try {
+								var fileHash = `, "fileHash": "` + getHash(binary_data) + `"`; //read in the file and hash it
+							} catch (error) { anchorHash = ''; }
+						} else if ( typeof data !== 'undefined' && data != '' ) { //input was data provided via the --data parameter
+							try {
+								var fileHash = `, "fileHash": "` + getHash(Buffer.from(data)) + `"`; //get the hash of the provided data
+							} catch (error) { anchorHash = ''; }
+						} else { anchorHash = ''; }
+
+
+
 			//lets try to load data from the data parameter
 			var data = args['data'];
 		        if ( typeof data === 'undefined' || data == '' ) {
 
 				//no data parameter present, lets try the data-file parameter
 				var data_file = args['data-file'];
-			        if ( typeof data_file === 'undefined' || data_file == '' ) {console.error(`Error: Missing data / data-file to hash`); showUsage(workMode);}
+			        if ( typeof data_file === 'undefined' || data_file == '' ) {console.error(`Error: Missing data / data-file to verify`); showUsage(workMode);}
 
 				//data-file present lets try to read and parse the file
 				try {
-					var jsonld_input = JSON.parse(fs.readFileSync(data_file,'utf8')); //parse the given key as a json file
+					var binary_data = fs.readFileSync(data_file)
+					var jsonld_input = JSON.parse(binary_data); //parse the binary data as a json file
 				} catch (error) { console.error(`Error: Can't read data-file '${data_file}' or not valid JSON-LD data`); process.exit(1); }
+
+				//calculate the fileHash
+				var fileHash = getHash(binary_data)
 
 			} else {
 			//data parameter present, lets see if its valid json data
 				try {
 					var jsonld_input = JSON.parse(data);
 				} catch (error) { console.error(`Error: Not valid JSON data (${error})`); process.exit(1); }
+
+				//calculate the fileHash
+				var fileHash = getHash(Buffer.from(data));
 			}
 
 			//JSON data is loaded into jsonld_input, now lets only use the @context and body key
@@ -1933,7 +1981,7 @@ async function main() {
 				//data was successfully canonized
 
 					//get the hash of the canonized data
-					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown hashAlgorithm ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
+					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown or missing hashAlgorithm - ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
 					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
 
 					//do all the testing now in the verifyAuthors block
@@ -1948,9 +1996,10 @@ async function main() {
 						if ( jsonld_authors.length == 0) { errorStr='no authors in the authors-array'; break verifyAuthors; }
 						//check each authors array entry
 						jsonld_authors.every( authorEntry => {
-							var authorName = authorEntry["name"]; if (typeof authorName !== 'string') { errorStr='authors.name entry is not an string'; return false; }
+							var authorName = authorEntry["name"]; if (typeof authorName !== 'string') { errorStr='authors.name entry is missing or not a string'; return false; }
+
 							var authorWitness = authorEntry["witness"]; if (typeof authorWitness !== 'object') { errorStr='authors.witness entry is missing or not a json object'; return false; }
-							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"]; if (authorWitnessAlgorithm != 'ed25519') { errorStr=`authors.witness.algorithm entry for '${authorName}' is missing or not 'ed25519'`; return false; }
+							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"];	if (typeof authorWitnessAlgorithm !== 'string') { errorStr='authors.witness entry is missing or not a string'; return false; }
 
 							var authorWitnessPublicKey = authorWitness["publicKey"]; if (typeof authorWitnessPublicKey !== 'string' || ! regExpHex.test(authorWitnessPublicKey) ) { errorStr=`authors.witness.publickey entry for '${authorName}' is not a valid hex-string`; return false; }
 							//load the public key
@@ -1964,17 +2013,46 @@ async function main() {
 
 							var authorWitnessSignature = authorWitness["signature"]; if (typeof authorWitnessSignature !== 'string' || ! regExpHex.test(authorWitnessSignature) ) { errorStr=`authors.witness.signature entry for '${authorName}' is not a valid hex-string`; return false; }
 
-							//load the Ed25519Signature
-							try {
-								var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
-							} catch (error) { errorStr=`authors.witness.signature entry for '${authorName}' error ${error}`; return false; }
+							var verified = false;
 
-							//do the verification
-							var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
+							//check now the different algorithm types - currently we support 'ed25519' and 'CIP-0008/CIP-0030'
+							switch (authorWitnessAlgorithm) {
+
+								case 'ed25519': //witness is signed with the standard ed25519 algorithm
+
+									//load the Ed25519Signature
+									try {
+										var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
+									} catch (error) { errorStr=`authors.witness.signature entry for '${authorName}' error ${error}`; return false; }
+									//do the verification
+									var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
+									break;
+
+								case 'CIP-0008': //witness is signed with the CIP-0008 (signData) algorithm
+								case 'CIP-0030': //witness is signed with the CIP-0030 (signData) algorithm (deprecated)
+
+									//verify the Signature
+									try {
+										var ret = verifyCIP8('verify-cip8',
+													[ '--cip8',
+													  '--cose-sign1', authorWitnessSignature,
+													  '--cose-key', `a4010103272006215820${authorWitnessPublicKey}`, //prefix the publickey with the standard parameters for CIP0030
+													  '--data-hex', canonized_hash ] );
+									} catch (error) { errorStr=`authors.witness.signature entry for '${authorName}' error ${error.msg}`; return false; }
+									var verified = ret.verified;
+									break;
+
+								default: //no supported algorithm found or its missing
+									errorStr=`authors.witness.algorithm entry for '${authorName}' is missing or not supported. value='${authorWitnessAlgorithm}'`; return false;
+									break;
+
+							} //switch authorWitnessAlgorithm
+
+							//check if there at least one not verified witness
 							if (!verified) { errorStr=`at least one invalid signature found`; }
 
 							//add it to the array of authors
-							var authorArrayEntry = { "name" : authorName, "publicKey" : authorWitnessPublicKey, "signature" : authorWitnessSignature, "valid" : verified };
+							var authorArrayEntry = { "name" : authorName, "valid" : verified, "algorithm" : authorWitnessAlgorithm, "publicKey" : authorWitnessPublicKey, "signature" : authorWitnessSignature };
 							authors_array.push(authorArrayEntry);
 
 							//return=true -> go to the next entry
@@ -1987,14 +2065,14 @@ async function main() {
 
 					//compose the content for the output
 					if ( args['json'] === true ) { //generate content in json format
-						var content = `{ "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + ` }`;
+						var content = `{ "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "fileHash": "${fileHash}" }`;
 					} else if ( args['json-extended'] === true ) { //generate content in extended json format
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
 							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
 						})
-						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
+						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "canonizedHash": "${canonized_hash}", "fileHash": "${fileHash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = result;
 					}
@@ -2075,7 +2153,7 @@ async function main() {
 				//data was successfully canonized
 
 					//get the hash of the canonized data
-					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown hashAlgorithm ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
+					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown or missing hashAlgorithm - ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
 					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
 
 					//sign the data
@@ -2090,21 +2168,23 @@ async function main() {
 					//do all the testing now in the verifyAuthors block
 					verifyAuthors: {
 
-						//check that the authors entry is present , if not make a blank array and exit the verifyAthors checks
+						//check that the authors entry is present , if not make a blank array and exit
 						if ( jsonld_input["authors"] === undefined ) { break verifyAuthors; }
 						var jsonld_authors = jsonld_input["authors"];
 						//check that the authors entry is an array
-						if ( typeof jsonld_authors !== 'object' || jsonld_authors instanceof Array == false ) { console.error(`Error: authors entry is not an array`); process.exit(1); }
+						if ( typeof jsonld_authors !== 'object' || jsonld_authors instanceof Array == false ) { econsole.error(`Error: authors entry is not an array`); process.exit(1); }
 						//check each authors array entry
 						jsonld_authors.every( authorEntry => {
 							var authorName = authorEntry["name"]; if (typeof authorName !== 'string') { console.error(`Error: authors.name entry is not an string`); process.exit(1); }
+
 							var authorWitness = authorEntry["witness"]; if (typeof authorWitness !== 'object') { console.error(`Error: authors.witness entry is missing or not a json object`); process.exit(1); }
-							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"]; if (authorWitnessAlgorithm != 'ed25519') { console.error(`Error: authors.witness.algorithm entry for '${authorName}' is missing or not 'ed25519'`); process.exit(1); }
+							var authorWitnessAlgorithm = authorWitness["witnessAlgorithm"];	if (typeof authorWitnessAlgorithm !== 'string') { console.error(`Error: authors.witness.algorithm entry for '${authorName}' is missing or not a string`); process.exit(1); }
+
 							var authorWitnessPublicKey = authorWitness["publicKey"]; if (typeof authorWitnessPublicKey !== 'string' || ! regExpHex.test(authorWitnessPublicKey) ) { console.error(`Error: authors.witness.publickey entry for '${authorName}' is not a valid hex-string`); process.exit(1); }
 							//load the public key
 							try {
 								var publicKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(authorWitnessPublicKey,'hex'));
-							} catch (error) { console.error(`Error: authors.witness.publickey entry for '${authorName}' error ${error}`); process.exit(1); }
+							} catch (error) { errorStr=`authors.witness.publickey entry for '${authorName}' error ${error}`; return false; }
 
 							//check if the current authors publicKey is the same as the one we wanna add
 							if ( authorWitnessPublicKey == pubKey ) {
@@ -2115,25 +2195,48 @@ async function main() {
 							}
 
 							//check if there is a duplicated entry already for that public key
-							var hasDuplicates = authors_array.some( element => { return element["witness"]["publicKey"] === authorWitnessPublicKey });
+							var hasDuplicates = authors_array.some( element => { return element["publicKey"] === authorWitnessPublicKey });
 							if (hasDuplicates) { console.error(`Error: authors.witness.publickey '${authorWitnessPublicKey}' in author '${authorName}' has duplicated entries! public keys must be unique, please remove duplicates first.`); process.exit(1); }
 
-							//get the entries witness signature
 							var authorWitnessSignature = authorWitness["signature"]; if (typeof authorWitnessSignature !== 'string' || ! regExpHex.test(authorWitnessSignature) ) { console.error(`Error: authors.witness.signature entry for '${authorName}' is not a valid hex-string`); process.exit(1); }
 
-							//load the Ed25519Signature
-							try {
-								var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
-							} catch (error) { console.error(`Error: authors.witness.signature entry for '${authorName}' error ${error}`); process.exit(1); }
+							var verified = false;
 
-							//do the verification
-							var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
-							if (!verified) { console.error(`Error: signature of '${authorName}' is invalid`); process.exit(1); }
+							//check now the different algorithm types - currently we support 'ed25519' and 'CIP-0008'
+							switch (authorWitnessAlgorithm) {
+
+								case 'ed25519': //witness is signed with the standard ed25519 algorithm
+
+									//load the Ed25519Signature
+									try {
+										var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(authorWitnessSignature);
+									} catch (error) { console.error(`Error: authors.witness.signature entry for '${authorName}' error ${error}`); process.exit(1); }
+									//do the verification
+									var verified = publicKey.verify(Buffer.from(canonized_hash,'hex'),ed25519signature);
+									break;
+
+								case 'CIP-0008': //witness is signed with the CIP-0008 (signData) algorithm
+
+									//verify the Signature
+									try {
+										var ret = verifyCIP8('verify-cip8',
+													[ '--cip8',
+													  '--cose-sign1', authorWitnessSignature,
+													  '--cose-key', `a4010103272006215820${authorWitnessPublicKey}`, //prefix the publickey with the standard parameters for CIP0030
+													  '--data-hex', canonized_hash ] );
+									} catch (error) { console.error(`Error: authors.witness.signature entry for '${authorName}' error ${error.msg}`); process.exit(1); }
+									var verified = ret.verified;
+									break;
+
+								default: //no supported algorithm found or its missing
+									console.error(`Error: authors.witness.algorithm entry for '${authorName}' is missing or not supported. value='${authorWitnessAlgorithm}'`); process.exit(1);
+									break;
+
+							} //switch authorWitnessAlgorithm
 
 							//at this point, the existing author has been verified, add it to the array of authors
 							var authorArrayEntry = { "name" : authorName,  "witness": { "witnessAlgorithm": authorWitnessAlgorithm, "publicKey" : authorWitnessPublicKey, "signature" : authorWitnessSignature } };
 							authors_array.push(authorArrayEntry);
-//							all_authors_publickey_array.push(authorWitnessPublicKey); //add the publickey to the extra array for easier dublicate entry check
 
 							//return=true -> go to the next entry
 							return true;
