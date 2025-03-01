@@ -1,5 +1,18 @@
 ## Release Notes / Change-Logs
 
+* **1.23.0**
+  
+  #### NEW FUNCTION - Sign/Verify Calidus Pool-Key registration metadata (CIP88v2)
+
+   - Generating of new Calidus Pool-Key registration metadata is now possible via the `sign --cip88` method<br>
+     The data can be generated in human readable JSON format, or as a binary CBOR file. Both can directly be used in a transaction on the blockchain.
+   - Verification of Calidus Pool-Key registration metadata is now possible via the `verify --cip88` method<br>
+     The data for verification can be provided as JSON-File, JSON-Plaintext or as a CBOR-HexString
+
+  #### Other Changes
+  
+    - Cardano-Signer is now using the cardano-serialization-lib version 14.1.1
+
 * **1.22.0**
   - Verification of signatures in `--cip100` mode now also supports both the `CIP-0030` & `CIP-0008` author wittnessAlgorithm
   - Signing a jsonld file in `--cip100` mode with `ed25519` author signatures now also rechecks existing `CIP-0030/CIP-0008` signatures

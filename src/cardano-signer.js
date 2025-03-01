@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.22.0"
+const version = "1.23.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -16,8 +16,8 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor'], //all booleans are set to false per default
+	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
@@ -34,6 +34,7 @@ const args = require('minimist')(process.argv.slice(3),parse_options); //slice(3
 
 //various constants
 const regExpHex = /^[0-9a-fA-F]+$/;
+const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;
 const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
 
 //catch all exceptions that are not catched via try
@@ -106,6 +107,21 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'sign-cip88':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88 mode:${Reset}`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip88${Reset}`);
+		console.log(`   Params: ${FgGreen}--calidus-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to use as the new calidus-key${Reset}`);
+		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stakepool${Reset}`);
+		console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
+		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex(text)${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+		console.log(`           [${FgGreen}--out-cbor${Reset} "<path_to_file>"]			${Dim}path to write a binary metadata.cbor file to${Reset}`);
+	        console.log(`   Output: ${FgCyan}Registration-Metadata in JSON-, cborHex-, cborBinary-Format${Reset}`);
+	        console.log(``)
+		break;
+
 	case 'sign-cip100':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519 algorithm):${Reset}`)
@@ -127,7 +143,7 @@ switch (topic) {
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify${Reset}`);
 		console.log(`   Params: ${FgGreen}--data-hex${Reset} "<hex>" | ${FgGreen}--data${Reset} "<text>" | ${FgGreen}--data-file${Reset} "<path_to_file>"${Reset}`);
-		console.log(`							${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
+		console.log(`								${Dim}data/payload/file to verify in hex-, text- or binary-file-format${Reset}`);
 		console.log(`           ${FgGreen}--signature${Reset} "<hex>|<bech>"				${Dim}signature in hex- or bech-format${Reset}`);
 		console.log(`           ${FgGreen}--public-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a public-key-file or a direct public hex/bech-key string${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional address check against the public-key (address-file or a direct bech/hex format)${Reset}`);
@@ -156,6 +172,20 @@ switch (topic) {
 	        console.log(``)
 		break;
 
+	case 'verify-cip88':
+	        console.log(``)
+	        console.log(`${Bright}${Underscore}Verify CIP-88 Calidus-Pool-PublicKey registration-data:${Reset}`)
+	        console.log(``)
+	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip88${Reset}`);
+		console.log(`   Params: ${FgGreen}--data${Reset} "<json-metadata>" |				${Dim}data to verify as json text${Reset}`);
+		console.log(`           ${FgGreen}--data-file${Reset} "<path_to_file>" |			${Dim}data to verify as json file${Reset}`);
+		console.log(`           ${FgGreen}--data-hex${Reset} "<hex>"					${Dim}data to verify as cbor-hex-format${Reset}`);
+		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
+		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
+	        console.log(`   Output: ${FgCyan}"true/false"${Reset} or ${FgCyan}JSON-Format${Reset}`);
+	        console.log(``)
+		break;
+
 	case 'verify-cip100':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Verify Signatures in CIP-100/108/119/136 governance JSON-LD metadata:${Reset}`)
@@ -168,7 +198,6 @@ switch (topic) {
 	        console.log(`   Output: ${FgCyan}"true/false"${Reset} or ${FgCyan}JSON-Format${Reset}`);
 	        console.log(``)
 		break;
-
 
 	case 'keygen':
 	case 'keygen-cip36':
@@ -214,9 +243,11 @@ switch (topic) {
 		showUsage('sign',false);
 		showUsage('sign-cip8',false)
 		showUsage('sign-cip36',false)
+		showUsage('sign-cip88',false)
 		showUsage('sign-cip100',false)
 		showUsage('verify',false)
 		showUsage('verify-cip8',false)
+		showUsage('verify-cip88',false)
 		showUsage('verify-cip100',false)
 		showUsage('keygen',false)
 		showUsage('canonize-cip100',false)
@@ -253,11 +284,13 @@ function trimMnemonic(s){
         return s;
 }
 
-function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json, a direct hex entry or a bech-string  // returns a hexstring of the key
+function readKey2hex(key,type,jsonSearchArray) { //reads a standard-cardano-skey/vkey-file-json, a direct hex entry or a bech-string  // returns a hexstring of the key
 
 	//inputs:
 	//	key -> string that points to a file or direct data
 	//	type -> string 'secret' or 'public'
+	//	jsonSearchArray -> defaults to ['Signing','ExtendedSigning'] for secret type and ['Verification','ExtendedVerification'] for public type.
+	//			It can be used to filter for a specific type of json key. f.e. ['StakePoolSigning','StakePoolExtendedSigning']
 
 	//returns:
 	//	secretkey 32 or 64 bytes long (type = secret)
@@ -269,11 +302,15 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 
 		case "secret": //convert a secret key into a hex string, always returns the full privat-key-hex (extended or non-extended)
 
+			// set the default searchstring for the type file in json key files
+			if ( ! jsonSearchArray ) { jsonSearchArray = [ 'Signing', 'ExtendedSigning' ]; }
+
 			// try to use the parameter as a filename for a cardano skey json with a cborHex entry
 			try {
 				const key_json = JSON.parse(fs.readFileSync(key,'utf8')); //parse the given key as a json file
-				const is_signing_key = key_json.type.toLowerCase().includes('signing') //boolean if the json contains the keyword 'signing' in the type field
-				if ( ! is_signing_key ) { console.error(`Error: The file '${key}' is not a signing/secret key json`); process.exit(1); }
+//				const is_signing_key = key_json.type.toLowerCase().includes('signing') //boolean if the json contains the keyword 'signing' in the type field
+				const is_signing_key = jsonSearchArray.some( element => key_json.type.toLowerCase().includes(element.toLowerCase()) ); //boolean if the json contains one of the keywords in the jsonSearchArray
+				if ( ! is_signing_key ) { console.error(`Error: The file '${key}' is not a secret key json of type '${jsonSearchArray}'. Instead it is of type '` + key_json.type + `'`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
 				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The secret key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
@@ -305,11 +342,15 @@ function readKey2hex(key,type) { //reads a standard-cardano-skey/vkey-file-json,
 
 		case "public": //convert a public key into a hex string, always return a non-extended public-key-hex
 
+			// set the default searchstring for the type file in json key files
+			if ( ! jsonSearchArray ) { jsonSearchArray = [ 'Verification', 'ExtendedVerification' ]; }
+
 			// try to use the parameter as a filename for a cardano vkey json with a cborHex entry
 			try {
 				const key_json = JSON.parse(fs.readFileSync(key,'utf8')); //parse the given key as a json file
-				const is_verification_key = key_json.type.toLowerCase().includes('verification') //boolean if the json contains the keyword 'verification' in the type field
-				if ( ! is_verification_key ) { console.error(`Error: The file '${key}' is not a verification/public key json`); process.exit(1); }
+//				const is_verification_key = key_json.type.toLowerCase().includes('verification') //boolean if the json contains the keyword 'verification' in the type field
+				const is_verification_key = jsonSearchArray.some( element => key_json.type.toLowerCase().includes(element.toLowerCase()) ); //boolean if the json contains one of the keywords in the jsonSearchArray
+				if ( ! is_verification_key ) { console.error(`Error: The file '${key}' is not a public key json of type '${jsonSearchArray}'. Instead it is of type '` + key_json.type + `'`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
 				//check that the given key is a hex string
 				if ( ! regExpHex.test(key_hex) ) { console.error(`Error: The public key in file '${key}' entry 'cborHex' is not a valid hex string`); process.exit(1); }
@@ -528,6 +569,35 @@ function deriveChecksumBits(entropyBuffer) {
         return bytesToBinary(Array.from(hash)).slice(0, CS);
 }
 
+// function to convert a json object (JSON.parse) into a Map, this also converts hex-strings into bytearrays/buffers
+const jsToMap = (obj) => {
+    switch (typeof obj) {
+        case "object":
+            if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                    obj[i] = jsToMap(obj[i]);
+                }
+                return obj;
+            } else if (Buffer.isBuffer(obj)) {
+                return obj;
+            } else {
+                const myMap = new Map();
+                for (const [key, value] of Object.entries(obj)) {
+                    const intKey = parseInt(key);
+                    myMap.set(intKey, jsToMap(value));
+                }
+                return myMap;
+            }
+        default:
+            if (obj.match !== undefined) {
+                return obj.match(regExpHexWith0x) ? Buffer.from(obj.replace('0x',''), 'hex') : obj;
+            }
+            return obj;
+    }
+}
+
+
+
 
 
 // VERIFY CIP8/30 FUNCTION -> coded as a function so it can be reused within other functions
@@ -714,7 +784,7 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 			//VERIFY
 			var verified = publicKey.verify(Buffer.from(Sig_structure_cbor_hex,'hex'),ed25519signature);
 
-			//compose the content for the output: signature data + public key
+			//compose the content for the output
 			if ( sub_args['json'] === true ) { //generate content in json format
 				var content = `{ "result": "${verified}" }`;
 			} else if ( sub_args['json-extended'] === true ) { //generate content in json format with additional fields
@@ -728,13 +798,180 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 				var content = `${verified}`;
 			}
 
-			//return the content, the verified boolean, the error boolean
+			//return the content & the verified boolean
 			return {
 				'content': content,
 				'verified': verified,
 			}
 
 }
+
+
+// SIGN CIP8/30 FUNCTION -> coded as a function so it can be reused within other functions
+function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) { //default calling arguments are the same as calling the main process - can be modified by subfunctions
+
+			var sub_args = require('minimist')(calling_args,parse_options);
+
+			//get signing key -> store it in sign_key
+			var key_file_hex = sub_args['secret-key'];
+		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { throw {'msg': `Missing secret key parameter`, 'showUsage': workMode}; }
+
+			//read in the key from a file or direct hex
+		        sign_key = readKey2hex(key_file_hex, 'secret');
+
+			//load the private key (normal or extended)
+			try {
+			if ( sign_key.length <= 64 ) { var prvKey = CardanoWasm.PrivateKey.from_normal_bytes(Buffer.from(sign_key, "hex")); }
+						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(sign_key.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars)
+			} catch (error) { throw {'msg': `${error}`}; }
+
+			//generate the public key from the secret key for external verification
+			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
+
+			//get signing address (stake or paymentaddress in bech format)
+			var address = sub_args['address'];
+		        if ( typeof address === 'undefined' || address === true ) { throw {'msg': `Missing signing address parameter`, 'showUsage': workMode}; }
+
+			//read the address from a file or direct hex/bech. also do a match check against the public key
+		        sign_addr = readAddr2hex(address, pubKey);
+
+			//check that the given address belongs to the current network
+			if ( ( sign_addr.network == 'mainnet' ) && !(typeof sub_args['testnet-magic'] === 'undefined') ) { // check for mainnet address
+				throw {'msg': `The mainnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current '--testnet-magic xxx' setting.`}; }
+			else if ( ( sign_addr.network == 'testnet' ) && (typeof sub_args['testnet-magic'] === 'undefined') ) { // check for testnet address
+				throw {'msg': `The testnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`}; }
+
+                        //check that the given address belongs to the pubKey
+                        if ( sub_args['nohashcheck'] === false && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
+                                throw {'msg': `The ${sign_addr.type} address '${sign_addr.addr}' does not belong to the provided secret key.`}; process.exit(1);
+			}
+
+			//get payload-hex to sign -> store it in payload_data_hex
+			var payload_data_hex = sub_args['data-hex'];
+		        if ( typeof payload_data_hex === 'undefined' || payload_data_hex === true ) {
+
+				//no data-hex parameter present, lets try the data parameter
+				var payload_data = sub_args['data'];
+			        if ( typeof payload_data === 'undefined' || payload_data === true ) {
+
+					//no data parameter present, lets try the data-file parameter
+					var payload_data_file = sub_args['data-file'];
+				        if ( typeof payload_data_file === 'undefined' || payload_data_file === true ) {throw {'msg': `Missing data / data-hex / data-file to sign`, 'showUsage': workMode}; }
+
+					//data-file present lets read the file and store it hex encoded in payload_data_hex
+					try {
+						payload_data_hex = fs.readFileSync(payload_data_file,null).toString('hex'); //reads the file as binary
+					} catch (error) { throw {'msg': `Can't read data-file '${payload_data_file}'`}; }
+
+				} else {
+				//data parameter present, lets convert it to hex and store it in the payload_data_hex variable
+				payload_data_hex = Buffer.from(payload_data).toString('hex');
+				}
+
+			} else {
+				//data-hex is present, lets trim it, convert it to lowercase
+			        payload_data_hex = trimString(payload_data_hex.toLowerCase());
+				//check that the given data is a hex string, skip the test if payload_data_hex is empty. a nullstring is ok.
+				if ( payload_data_hex != '' && ! regExpHex.test(payload_data_hex) ) { throw {'msg': `Data to sign is not a valid hex string`}; }
+			}
+
+			var payload_data_hex_orig = payload_data_hex //copy the payload_data_hex for later json output (in case its hashed)
+
+			//generate the protectedHeader as an inner cbor (serialized Map)
+			// alg (1) - must be set to EdDSA (-8)
+			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
+			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
+			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
+
+			//hash the payload if its set via the flag --hashed. this is used if the payload gets too big, or if f.e. a hw-wallet cannot display the payload (non ascii)
+			var isHashed = sub_args['hashed'];
+			if ( isHashed ) { payload_data_hex = getHash(payload_data_hex, 28); } //hash the payload with blake2b_224 (28bytes digest length) }
+
+			//generate the unprotectedHeader map
+			var unprotectedHeader = new Map().set('hashed', isHashed) // { "hashed": true/false }
+
+			//generate the data to sign, as a serialized cbor of the Sig_structure
+			//Sig_structure = [
+			//  context : "Signature" / "Signature1" / "CounterSignature",    ; Signature1 (Sign1) here
+			//  body_protected : empty_or_serialized_map,                     ; protected from layer 1
+			//  ? sign_protected : empty_or_serialized_map,                   ; not present in Sign1 case
+			//  external_aad : bstr,                                          ; empty here
+			//  payload : bstr
+			//  ]
+			var Sig_structure = [ "Signature1", Buffer.from(protectedHeader_cbor_hex,'hex'),Buffer.from(''), Buffer.from(payload_data_hex,'hex') ]
+
+			//convert it to cbor representation
+			Sig_structure_cbor_hex = cbor.encode(Sig_structure).toString('hex');
+
+			//sign the data
+			try {
+			var signedBytes = prvKey.sign(Buffer.from(Sig_structure_cbor_hex, 'hex')).to_bytes();
+			var signature_hex = Buffer.from(signedBytes).toString('hex');
+			} catch (error) { throw {'msg': `${error}`}; }
+
+			//generate the signed message structure
+			//COSE_Sign1_structure = [
+			//  bstr,               ; protected header
+			//  { * label => any }, ; unprotected header
+			//  bstr / nil,         ; message(payload) to sign
+			//  bstr                ; signature
+			//  ]
+			if ( sub_args['nopayload'] ) { //the payload can be excluded from the COSE_Sign1 signature if the payload is known by the involved entities
+				var COSE_Sign1_structure = [ Buffer.from(protectedHeader_cbor_hex,'hex'), unprotectedHeader, null , Buffer.from(signature_hex,'hex') ]
+			} else {
+				var COSE_Sign1_structure = [ Buffer.from(protectedHeader_cbor_hex,'hex'), unprotectedHeader, Buffer.from(payload_data_hex,'hex'), Buffer.from(signature_hex,'hex') ]
+			}
+
+			//convert it to cbor representation
+			var COSE_Sign1_cbor_hex = cbor.encode(COSE_Sign1_structure).toString('hex');
+
+			//generate the COSE_Key structure with the following headers set:
+			//kty (1) - must be set to OKP (1)
+			//kid (2) - Optional, if present must be set to the same value as in the Sig_structures protectedHeader_cbor via map entry (4)
+			//alg (3) - must be set to EdDSA (-8)
+			//crv (-1) - must be set to Ed25519 (6)
+			//x (-2) - must be set to the public key bytes of the key used to sign the Sig_structure
+			var COSE_Key_structure = new Map().set(1,1).set(3,-8).set(-1,6).set(-2, Buffer.from(pubKey,'hex'));
+
+			//convert it to cbor representation
+			var COSE_Key_cbor_hex = cbor.encode(COSE_Key_structure).toString('hex');
+
+			//compose the content for the output: signature data + key
+			if ( sub_args['json'] === true ) { //generate content in json format
+				var content = `{ "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" }`;
+			} else if ( sub_args['json-extended'] === true ) { //generate content in json format with additional fields
+
+				//generate the format displayed to the user 'Cardano Message' prefix='cms_' + COSE_Sign1(base64url encoded) + fnv32a_hash as checksum(bash64url encoded)
+				const signedMsg_prefix = 'cms_';
+				const signedMsg_data = base64url.encode(Buffer.from(COSE_Sign1_cbor_hex,'hex'));
+				const signedMsg_checksum = base64url.encode(Buffer.from(new Uint8Array(new Uint32Array([ fnv32.fnv_1a(Buffer.from(COSE_Sign1_cbor_hex,'hex')) ]).buffer).reverse()));
+				const signedMsg = signedMsg_prefix + signedMsg_data + signedMsg_checksum
+
+				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
+				var content = `{ "workMode": "${workMode}", "addressHex": "${sign_addr.hex}", "addressType": "${sign_addr.type}", "addressNetwork": "${sign_addr.network}", `;
+				if ( payload_data_hex_orig.length <= 2000000 ) { content += `"inputDataHex": "${payload_data_hex_orig}", `; } //only include the payload_data_hex if it is less than 2M of chars
+				content += `"isHashed": "${isHashed}",`;
+				if ( isHashed ) { content += `"hashedInputDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex(now in hashed format) if isHashed is true
+				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"signDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
+				content += `"signature": "${signature_hex}",`;
+				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `
+				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" } }`;
+
+			} else { //generate content in text format
+				var content = COSE_Sign1_cbor_hex + " " + COSE_Key_cbor_hex;
+			}
+
+			//return the whole content and also the COSE_Sign1 & COSE_Key
+			return {
+				'content': content,
+				'cose_sign1_cbor_hex': COSE_Sign1_cbor_hex,
+				'cose_key_cbor_hex': COSE_Key_cbor_hex
+			}
+
+
+}
+
+
 
 
 
@@ -768,6 +1005,9 @@ async function main() {
 		//add deregister in CIP36 mode if the flag was set
 		if ( args['deregister'] === true ) { workMode = workMode + "-deregister" }
 	}
+
+	//CIP88-Flag-Check
+        if ( args['cip88'] === true ) {workMode = workMode + '-cip88'}
 
 	//CIP100-Flag-Check
         if ( args['cip100'] === true ) {workMode = workMode + '-cip100'}
@@ -888,166 +1128,27 @@ async function main() {
                 case "sign-cip8":  //SIGN DATA IN CIP-8 MODE -> currently idential to CIP-30
                 case "sign-cip30":  //SIGN DATA IN CIP-30 MODE -> CIP-8 structure
 
-			//get signing key -> store it in sign_key
-			var key_file_hex = args['secret-key'];
-		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { console.error(`Error: Missing secret key parameter`); showUsage(workMode); }
-
-			//read in the key from a file or direct hex
-		        sign_key = readKey2hex(key_file_hex, 'secret');
-
-			//load the private key (normal or extended)
+			//call signing subfunction
 			try {
-			if ( sign_key.length <= 64 ) { var prvKey = CardanoWasm.PrivateKey.from_normal_bytes(Buffer.from(sign_key, "hex")); }
-						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(sign_key.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars)
-			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
-
-			//generate the public key from the secret key for external verification
-			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
-
-			//get signing address (stake or paymentaddress in bech format)
-			var address = args['address'];
-		        if ( typeof address === 'undefined' || address === true ) { console.error(`Error: Missing signing address parameter`); showUsage(workMode); }
-
-			//read the address from a file or direct hex/bech. also do a match check against the public key
-		        sign_addr = readAddr2hex(address, pubKey);
-
-			//check that the given address belongs to the current network
-			if ( ( sign_addr.network == 'mainnet' ) && !(typeof args['testnet-magic'] === 'undefined') ) { // check for mainnet address
-				console.error(`Error: The mainnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current '--testnet-magic xxx' setting.`); process.exit(1); }
-			else if ( ( sign_addr.network == 'testnet' ) && (typeof args['testnet-magic'] === 'undefined') ) { // check for testnet address
-				console.error(`Error: The testnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`); process.exit(1); }
-
-                        //check that the given address belongs to the pubKey
-                        if ( args['nohashcheck'] === false && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
-                                console.error(`Error: The ${sign_addr.type} address '${sign_addr.addr}' does not belong to the provided secret key.`); process.exit(1);
-			}
-
-			//get payload-hex to sign -> store it in payload_data_hex
-			var payload_data_hex = args['data-hex'];
-		        if ( typeof payload_data_hex === 'undefined' || payload_data_hex === true ) {
-
-				//no data-hex parameter present, lets try the data parameter
-				var payload_data = args['data'];
-			        if ( typeof payload_data === 'undefined' || payload_data === true ) {
-
-					//no data parameter present, lets try the data-file parameter
-					var payload_data_file = args['data-file'];
-				        if ( typeof payload_data_file === 'undefined' || payload_data_file === true ) {console.error(`Error: Missing data / data-hex / data-file to sign`); showUsage(workMode);}
-
-					//data-file present lets read the file and store it hex encoded in payload_data_hex
-					try {
-						payload_data_hex = fs.readFileSync(payload_data_file,null).toString('hex'); //reads the file as binary
-					} catch (error) { console.error(`Error: Can't read data-file '${payload_data_file}'`); process.exit(1); }
-
-				} else {
-				//data parameter present, lets convert it to hex and store it in the payload_data_hex variable
-				payload_data_hex = Buffer.from(payload_data).toString('hex');
-				}
-
-			} else {
-				//data-hex is present, lets trim it, convert it to lowercase
-			        payload_data_hex = trimString(payload_data_hex.toLowerCase());
-				//check that the given data is a hex string, skip the test if payload_data_hex is empty. a nullstring is ok.
-				if ( payload_data_hex != '' && ! regExpHex.test(payload_data_hex) ) { console.error(`Error: Data to sign is not a valid hex string`); process.exit(1); }
-			}
-
-			var payload_data_hex_orig = payload_data_hex //copy the payload_data_hex for later json output (in case its hashed)
-
-			//generate the protectedHeader as an inner cbor (serialized Map)
-			// alg (1) - must be set to EdDSA (-8)
-			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
-			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
-			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
-
-			//hash the payload if its set via the flag --hashed. this is used if the payload gets too big, or if f.e. a hw-wallet cannot display the payload (non ascii)
-			var isHashed = args['hashed'];
-			if ( isHashed ) { payload_data_hex = getHash(payload_data_hex, 28); } //hash the payload with blake2b_224 (28bytes digest length) }
-
-			//generate the unprotectedHeader map
-			var unprotectedHeader = new Map().set('hashed', isHashed) // { "hashed": true/false }
-
-			//generate the data to sign, as a serialized cbor of the Sig_structure
-			//Sig_structure = [
-			//  context : "Signature" / "Signature1" / "CounterSignature",    ; Signature1 (Sign1) here
-			//  body_protected : empty_or_serialized_map,                     ; protected from layer 1
-			//  ? sign_protected : empty_or_serialized_map,                   ; not present in Sign1 case
-			//  external_aad : bstr,                                          ; empty here
-			//  payload : bstr
-			//  ]
-			var Sig_structure = [ "Signature1", Buffer.from(protectedHeader_cbor_hex,'hex'),Buffer.from(''), Buffer.from(payload_data_hex,'hex') ]
-
-			//convert it to cbor representation
-			Sig_structure_cbor_hex = cbor.encode(Sig_structure).toString('hex');
-
-			//sign the data
-			try {
-			var signedBytes = prvKey.sign(Buffer.from(Sig_structure_cbor_hex, 'hex')).to_bytes();
-			var signature_hex = Buffer.from(signedBytes).toString('hex');
-			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
-
-			//generate the signed message structure
-			//COSE_Sign1_structure = [
-			//  bstr,               ; protected header
-			//  { * label => any }, ; unprotected header
-			//  bstr / nil,         ; message(payload) to sign
-			//  bstr                ; signature
-			//  ]
-			if ( args['nopayload'] ) { //the payload can be excluded from the COSE_Sign1 signature if the payload is known by the involved entities
-				var COSE_Sign1_structure = [ Buffer.from(protectedHeader_cbor_hex,'hex'), unprotectedHeader, null , Buffer.from(signature_hex,'hex') ]
-			} else {
-				var COSE_Sign1_structure = [ Buffer.from(protectedHeader_cbor_hex,'hex'), unprotectedHeader, Buffer.from(payload_data_hex,'hex'), Buffer.from(signature_hex,'hex') ]
-			}
-
-			//convert it to cbor representation
-			var COSE_Sign1_cbor_hex = cbor.encode(COSE_Sign1_structure).toString('hex');
-
-			//generate the COSE_Key structure with the following headers set:
-			//kty (1) - must be set to OKP (1)
-			//kid (2) - Optional, if present must be set to the same value as in the Sig_structures protectedHeader_cbor via map entry (4)
-			//alg (3) - must be set to EdDSA (-8)
-			//crv (-1) - must be set to Ed25519 (6)
-			//x (-2) - must be set to the public key bytes of the key used to sign the Sig_structure
-			var COSE_Key_structure = new Map().set(1,1).set(3,-8).set(-1,6).set(-2, Buffer.from(pubKey,'hex'));
-
-			//convert it to cbor representation
-			var COSE_Key_cbor_hex = cbor.encode(COSE_Key_structure).toString('hex');
-
-			//compose the content for the output: signature data + key
-			if ( args['json'] === true ) { //generate content in json format
-				var content = `{ "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" }`;
-			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
-
-				//generate the format displayed to the user 'Cardano Message' prefix='cms_' + COSE_Sign1(base64url encoded) + fnv32a_hash as checksum(bash64url encoded)
-				const signedMsg_prefix = 'cms_';
-				const signedMsg_data = base64url.encode(Buffer.from(COSE_Sign1_cbor_hex,'hex'));
-				const signedMsg_checksum = base64url.encode(Buffer.from(new Uint8Array(new Uint32Array([ fnv32.fnv_1a(Buffer.from(COSE_Sign1_cbor_hex,'hex')) ]).buffer).reverse()));
-				const signedMsg = signedMsg_prefix + signedMsg_data + signedMsg_checksum
-
-				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
-				var content = `{ "workMode": "${workMode}", "addressHex": "${sign_addr.hex}", "addressType": "${sign_addr.type}", "addressNetwork": "${sign_addr.network}", `;
-				if ( payload_data_hex_orig.length <= 2000000 ) { content += `"inputDataHex": "${payload_data_hex_orig}", `; } //only include the payload_data_hex if it is less than 2M of chars
-				content += `"isHashed": "${isHashed}",`;
-				if ( isHashed ) { content += `"hashedInputDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex(now in hashed format) if isHashed is true
-				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"signDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
-				content += `"signature": "${signature_hex}",`;
-				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `
-				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" } }`;
-
-			} else { //generate content in text format
-				var content = COSE_Sign1_cbor_hex + " " + COSE_Key_cbor_hex;
+				var result = signCIP8(workMode);  //no extra arguments than `workMode` means that the function takes the parameters from the main process call
+			} catch (error) {
+				console.error(`Error: ${error.msg}`);
+				if ( error.showUsage ) { showUsage(workMode); }
+				process.exit(1);
 			}
 
 			//output the signature data and the public key to the console or to a file
 			var out_file = args['out-file'];
 		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
-			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(result.content); }
 			else { //else try to write the content out to the given file
 				try {
-				fs.writeFileSync(out_file,content, 'utf8')
+				fs.writeFileSync(out_file,result.content, 'utf8')
 				// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 			break;
+
 
 
                 case "sign-cip36":  //SIGN REGISTRATION DATA IN CIP-36 MODE (Catalyst)
@@ -1182,10 +1283,10 @@ async function main() {
 				   1: <signature>  // signed signature(byte array) from the stake_secret_key
 			}
 			*/
-			const registrationMap = delegationMap.set(61285,new Map().set(1,Buffer.from(signature,'hex')))
+			var registrationMap = delegationMap.set(61285,new Map().set(1,Buffer.from(signature,'hex')))
 
 			//convert it to a cbor hex string
-			const registrationCBOR = Buffer.from(cbor.encode(registrationMap)).toString('hex');
+			var registrationCBOR = Buffer.from(cbor.encode(registrationMap)).toString('hex');
 
 			//compose the content for the output as JSON registration, extended JSON data or plain registrationCBOR
 			if ( args['json'] === true ) { //generate content in json format
@@ -1227,6 +1328,7 @@ async function main() {
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 			break;
+
 
 
                 case "sign-cip36-deregister":  //SIGN DEREGISTRATION DATA IN CIP-36 MODE (Catalyst)
@@ -1330,6 +1432,130 @@ async function main() {
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 			break;
+
+
+
+                case "sign-cip88":  //SIGN REGISTRATION DATA IN CIP-86 MODE (Pool-ID-Registration)
+
+			//get calidus public key -> store it in calidusPubKeyHex
+			var key_file_hex = args['calidus-public-key'];
+		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { console.error(`Error: Missing calidus public key parameter`); showUsage(workMode); }
+
+			//read in the key from a file or direct hex
+		        calidusPubKeyHex = readKey2hex(key_file_hex, 'public');
+
+			//load the calidus public key for sanity check
+			try {
+			var calidusPubKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(calidusPubKeyHex,'hex'));
+			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+
+			//get secret key -> store it in prvKeyHex
+			var key_file_hex = args['secret-key'];
+		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { console.error(`Error: Missing secret key parameter`); showUsage(workMode); }
+
+			//read in the key from a file or direct hex
+		        prvKeyHex = readKey2hex(key_file_hex, 'secret', [ 'StakePoolSigning', 'StakePoolExtendedSigning' ] );
+
+			//load the private key (normal or extended)
+			try {
+			if ( prvKeyHex.length <= 64 ) { var prvKey = CardanoWasm.PrivateKey.from_normal_bytes(Buffer.from(prvKeyHex, "hex")); }
+						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(prvKeyHex.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars)
+			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+
+			//generate the public key from the secret signing key
+			var pubKeyHex = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
+
+			//calculate the pool-id, which is just the hash of the pubKey
+			var poolIdHex = getHash(pubKeyHex,28)
+
+			//get the --nonce parameter
+			var nonce = args['nonce'];
+		        if ( typeof nonce === 'undefined' ) { var totalUtcSeconds = Math.floor(new Date().getTime() / 1000); nonce = 4492800 + (totalUtcSeconds - 1596059091) }  //if not defined, set it to the slotHeight of cardano-mainnet
+		        else if ( typeof nonce !== 'number' || nonce === true || nonce < 0 ) { console.error(`Error: Please specify a --nonce parameter with an unsigned integer value > 0, or remove the parameter so the mainnet slotHeight will be calculated from current time`); process.exit(1); }
+
+			//construct the payload map
+			var payloadMap = new Map().set(1,[ 1, Buffer.from(poolIdHex,'hex') ]).set(2,[]).set(3,[2]).set(4,nonce).set(7, Buffer.from(calidusPubKeyHex,'hex'));
+
+			//convert it to a cbor hex string
+			var payloadCborHex = Buffer.from(cbor.encode(payloadMap)).toString('hex');
+
+			//hash the delegationCBOR hex string
+			var payloadCborHash = getHash(payloadCborHex);
+
+
+			//sign the payloadCborHash with the private key in CIP8 mode
+			try {
+				var ret = signCIP8('sign-cip8',
+					[ '--cip8',
+//					  '--hashed',
+					  '--data-hex', payloadCborHash,
+					  '--secret-key', prvKeyHex,
+					  '--address', poolIdHex ] );
+			} catch (error) { console.error(`Error: CIP-8 signing error ${error.msg}`); process.exit(1); }
+
+			//convert the cose_sign1 into a standard map
+			var coseSign1Map = cbor.decode(ret.cose_sign1_cbor_hex);
+
+			//set the { "hashed": false } entry in the array at index 1 to 0 so it can be used in tx_metadata (no boolean values allowed)
+			coseSign1Map[1] = 0;
+//			coseSign1Map[1] = 1;
+
+			//convert the cose_key into a standard map
+			var coseKeyMap = cbor.decode(ret.cose_key_cbor_hex)
+
+			//construct the witness map within an array, we only generate one witness set here
+			var witnessMap = [ new Map().set(1, coseKeyMap).set(2, coseSign1Map) ];
+
+			//construct registration map
+			var registrationMap = new Map().set(867, new Map().set(0, 2).set(1, payloadMap).set(2, witnessMap));
+
+			//convert it to a cbor hex string
+			var registrationCborHex = Buffer.from(cbor.encode(registrationMap)).toString('hex');
+
+			//compose the content for the output as JSON registration, extended JSON data or plain registrationCBOR
+			if ( args['json'] === true ) { //generate content in json format
+
+				var content_payload = `{ "1": [ 1, "0x${poolIdHex}" ], "2": [], "3": [2], "4": ${nonce}, "7": "0x${calidusPubKeyHex}" }`;
+				var content_witness_public = `{ "1": 1, "3": -8, "-1": 6, "-2": "0x${pubKeyHex}" }`;
+				var content_witness_signature = `[ "0x` + Buffer.from(coseSign1Map[0]).toString('hex') + `", ${coseSign1Map[1]}, "0x` + Buffer.from(coseSign1Map[2]).toString('hex') + `", "0x` + Buffer.from(coseSign1Map[3]).toString('hex') + `" ]`;
+				var content = `{ "867": { "0": 2, "1": ${content_payload}, "2": [ { "1": ${content_witness_public}, "2": ${content_witness_signature} } ] } }`;
+				// content = JSON.stringify(JSON.parse(content_json), null, 4); //just to make a pretty json output
+
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+
+				var content_payload = `{ "1": [ 1, "0x${poolIdHex}" ], "2": [], "3": [2], "4": ${nonce}, "7": "0x${calidusPubKeyHex}" }`;
+				var content_witness_public = `{ "1": 1, "3": -8, "-1": 6, "-2": "0x${pubKeyHex}" }`;
+				var content_witness_signature = `[ "0x` + Buffer.from(coseSign1Map[0]).toString('hex') + `", ${coseSign1Map[1]}, "0x` + Buffer.from(coseSign1Map[2]).toString('hex') + `", "0x` + Buffer.from(coseSign1Map[3]).toString('hex') + `" ]`;
+				var content_output_json = `{ "867": { "0": 2, "1": ${content_payload}, "2": [ { "1": ${content_witness_public}, "2": ${content_witness_signature} } ] } }`;
+				var content = `{ "workMode": "${workMode}", "poolIdHex": "${poolIdHex}", "calidusPublicKey": "${calidusPubKeyHex}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}", "nonce": ${nonce}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "coseSign1Hex": "${ret.cose_sign1_cbor_hex}", "coseKeyHex": "${ret.cose_key_cbor_hex}", "output": { "cbor": "${registrationCborHex}", "json": ${content_output_json} } }`;
+
+			} else { //generate content in text format
+				var content = `${registrationCborHex}`;
+			}
+
+			//output the content to the console or to a file
+			var out_file = args['out-file'];
+		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
+			else { //else try to write the content out to the given file
+				try {
+				fs.writeFileSync(out_file,content, 'utf8')
+				// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output the registrationCBOR to a binary file
+			var out_cbor = args['out-cbor'];
+		        //if there is a --out-cbor parameter specified then try to write output as a binary cbor file
+			if ( typeof out_cbor === 'string' ) {
+				try {
+				var writeBuf = Buffer.from(registrationCborHex,'hex')
+				fs.writeFileSync(out_cbor, writeBuf, 'binary')
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			break;
+
 
 
                 case "verify":	//VERIFY DATA IN DEFAULT MODE
@@ -1443,7 +1669,7 @@ async function main() {
 				var result = verifyCIP8(workMode);  //no extra arguments than `workMode` means that the function takes the parameters from the main process call
 			} catch (error) {
 				console.error(`Error: ${error.msg}`);
-				if ( result.showUsage ) { showUsage(workMode); }
+				if ( error.showUsage ) { showUsage(workMode); }
 				process.exit(1);
 			}
 
@@ -2267,6 +2493,152 @@ async function main() {
 					}
 
 			        }).catch( (err) => {console.log(`Error: Could not sign the data (${err.message})`);process.exit(1);});
+
+			break;
+
+
+		case "verify-cip88": //VERIFY DATA IN CIP88v2 (Calidus-Pool-Key)
+
+			//lets try to load data from the data parameter in json format
+			var data = args['data'];
+		        if ( typeof data === 'string' && data != '' ) {	//data parameter present, lets see if its valid json data
+				try {
+					var jsonObject = JSON.parse(data);
+					//convert the json object into a map object
+					var dataMap = jsToMap(jsonObject);
+				} catch (error) { console.error(`Error: Not valid JSON data (${error}) provided via the --data parameter`); process.exit(1); }
+
+			}
+
+			//no dataMap yet, lets try the data-file parameter
+			if ( ! dataMap ) {
+				var data_file = args['data-file'];
+			        if ( typeof data_file === 'string' && data_file != '' ) {
+					//data-file present lets try to read and parse the file as json
+					try {
+						var jsonObject = JSON.parse(fs.readFileSync(data_file,'utf8')); //parse the given file as a json file
+						//convert the json object into a map object
+						var dataMap = jsToMap(jsonObject);
+					} catch (error) { console.error(`Error: Can't read data-file '${data_file}' or not valid JSON data`); process.exit(1); }
+				} //data-file
+			} //dataMap
+
+			//no dataMap yet, lets try the data-hex parameter
+			if ( ! dataMap ) {
+				var data_hex = args['data-hex'];
+			        if ( typeof data_hex === 'string' && regExpHex.test(data_hex.toLowerCase()) ) {
+					//data-hex present lets try decode it from cbor
+					try {
+						var dataMap = cbor.decode(data_hex.toLowerCase()); //decode the given hex data as cbor
+					} catch (error) { console.error(`Error: Can't cbor decode the given data-hex (${error})`); process.exit(1); }
+				} //data-file
+			} //dataMap
+
+			//throw an error if we still have not dataMap to work with
+			if ( ! dataMap ) {console.error(`Error: Missing data / data-hex / data-file to verify`); showUsage(workMode);}
+
+			//we have the data to verify loaded into dataMap now, this is a Map object
+
+			//do a rough sanity check on the key map entries
+			if ( ! dataMap.has(867) || dataMap.get(867).size < 3 ) { console.error(`Error: Data to verify has no map label 867 or not enough entries`); process.exit(1); }
+			else if ( isNaN(dataMap.get(867).get(0)) || dataMap.get(867).get(0) < 2 ) { console.error(`Error: Map key 0 (version) is not set to 2 or above`); process.exit(1); }
+			else if ( ! dataMap.get(867).has(1) || dataMap.get(867).get(1).size < 5 ) { console.error(`Error: Map key 1 (payload) is missing or does not have at least 5 entries`); process.exit(1); }
+			else if ( ! dataMap.get(867).has(2) || ! dataMap.get(867).get(2) instanceof Array || dataMap.get(867).get(2).length != 1 ) { console.error(`Error: Map key 2 (witness) is missing or is not an array with a single entry (only one witness supported currently)`); process.exit(1); }
+
+			//get the payload_map and do deeper checks on it
+			var payloadMap = dataMap.get(867).get(1)
+			if ( !payloadMap.has(1) || !payloadMap.has(2) || !payloadMap.has(3) || !payloadMap.has(4) || !payloadMap.has(7) ) { console.error(`Error: Payload map does not have all needed keys 1,2,3,4 & 7`); process.exit(1); }
+			else if ( ! payloadMap.get(1) instanceof Array || payloadMap.get(1)[0] != 1 ) { console.error(`Error: PayloadMap key 1 (registraction-scope) is not an array or not of type pool-scope(1)`); process.exit(1); }
+			else if ( ! payloadMap.get(3) instanceof Array || isNaN(payloadMap.get(3)[0]) || payloadMap.get(3)[0] != 2) { console.error(`Error: PayloadMap key 3 (validation method) is not an array and/or not set to [2] -> CIP-0008`); process.exit(1); }
+			else if ( isNaN(payloadMap.get(4)) ) { console.error(`Error: PayloadMap key 4 (nonce) is not a uint number`); process.exit(1); }
+			else if ( ! Buffer.isBuffer(payloadMap.get(7)) || payloadMap.get(7).length != 32 ) { console.error(`Error: PayloadMap key 7 (update-public-key) is not a hex bytearray/buffer of length 32`); process.exit(1); }
+
+			//get the poolid from the scope=1 content and check that its a bytearray with the correct length
+			var scopePoolId = payloadMap.get(1)[1] //   [ 1 , h'(poolid-hex)' ]
+			if ( ! Buffer.isBuffer(scopePoolId) || scopePoolId.length != 28 ) { console.error(`Error: Pool-ID part in PayloadMap key 1 (registration-scope) is not a hex bytearray/buffer of length 28`); process.exit(1); }
+			var scopePoolIdHex =  scopePoolId.toString('hex')
+
+                        //load the calidus public key for sanity check
+                        try {
+                        	var calidusPubKey = CardanoWasm.PublicKey.from_bytes(payloadMap.get(7));
+				var calidusPubKeyHex = payloadMap.get(7).toString('hex')
+                        } catch (error) { console.error(`Error: PayloadMap key 7 (update-public-key) -> ${error}`); process.exit(1); }
+
+			//ok, the payloadMap should be fine, lets generate the cbor representation of it and also the hash for the message verification
+			var payloadCborHex = cbor.encode(payloadMap).toString('hex');
+			var payloadCborHash = getHash(payloadCborHex);
+
+			//get the witness_map of the FIRST entry and do deeper checks on it
+			var witnessMap = dataMap.get(867).get(2)[0]
+			if ( ! witnessMap.has(1) || ! witnessMap.has(2) ) { console.error(`Error: Witness entry does not have the needed keys 1 & 2`); process.exit(1); }
+			else if ( witnessMap.has(0) && witnessMap.get(0) != 0 ) { console.error(`Error: Witness entry key 0 (Witness Type Identifier) is not 0(COSE_Witness)`); process.exit(1); }
+
+			//get the COSE_Key and COSE_Sign1 part
+			var coseKeyMap = witnessMap.get(1)
+			var coseSign1Map = witnessMap.get(2)
+
+			//get the public key out of the coseKeyMap
+			if ( ! Buffer.isBuffer(coseKeyMap.get(-2)) || coseKeyMap.get(-2).length != 32) { console.error(`Error: coseKeyMap key -2 (public key) is not a hex bytearray/buffer of length 32`); process.exit(1); }
+                        //load the signing public key for sanity check
+                        try {
+                        	var pubKey = CardanoWasm.PublicKey.from_bytes(coseKeyMap.get(-2));
+				var pubKeyHex = coseKeyMap.get(-2).toString('hex')
+				var pubKeyPoolIdHex = getHash(pubKeyHex,28)  //the poolid that resolved from the used witnessPublicKey
+				if ( scopePoolIdHex != pubKeyPoolIdHex ) { console.error(`Error: scope-PoolID(${scopePoolIdHex}) and witnessPublicKey-PoolID(${pubKeyPoolIdHex}) are not the same`); process.exit(1); }
+                        } catch (error) { console.error(`Error: coseKeyMap key -2 (public key) -> ${error}`); process.exit(1); }
+
+			//get the used poolId from the coseSign1Map[0]
+			if ( ! Buffer.isBuffer(coseSign1Map[0]) || coseSign1Map[0].length != 41 ) { console.error(`Error: coseSign1Map[0] (protected header cbor) is not a hex bytearray/buffer of length 41`); process.exit(1); }
+			try {
+				var coseProtectedHeaderMap = cbor.decode(coseSign1Map[0])
+				var cosePoolIdHex = coseProtectedHeaderMap.get("address").toString('hex')
+				if ( scopePoolIdHex != cosePoolIdHex ) { console.error(`Error: scope-PoolID(${scopePoolIdHex}) and cose-PoolID(${cosePoolIdHex}) are not the same`); process.exit(1); }
+			} catch (error) { console.error(`Error: Can't cbor decode the given COSE_Sign1 protected header (${error})`); process.exit(1); }
+
+			if ( isNaN(coseSign1Map[1]) ) { console.error(`Error: coseSign1Map[1] (hashed true/false) is not a number`); process.exit(1); }
+			switch (coseSign1Map[1]) {
+				case 0: coseSign1Map[1] = { "hashed": false }; var verifyDataHex = payloadCborHash; break; //payload was not hashed
+				case 1: coseSign1Map[1] = { "hashed": true }; var verifyDataHex = getHash(payloadCborHash); break; //payload was hashed, so we also hash our comparising message
+				default:  console.error(`Error: coseSign1Map[1] (hashed true/false) is not 0 or 1`); process.exit(1); break; //only 0 and 1 are supported,otherwise throw an error
+			}
+
+			//convert the coseKeyMap and coseSign1Map into cbor-hex strings to pass it to the verification function and also to output it in json-extended format
+			var coseKeyHex = cbor.encode(coseKeyMap).toString('hex')
+			var coseSign1Hex = cbor.encode(coseSign1Map).toString('hex')
+
+			//verify the cip8 signature
+			try {
+				var ret = verifyCIP8('verify-cip88',
+							[ '--cip8',
+							  '--cose-sign1', coseSign1Hex, 				//pass it as cbor encoded hex string
+							  '--cose-key', coseKeyHex,					//pass it as cbor encoded hex string
+							  '--nohashcheck', '--json-extended',				//we already did the hash check above
+							  '--data-hex', verifyDataHex ] ); 				//we provide the self generated data for checking and not the included one
+			} catch (error) { console.error(`Error: CIP8 verification error ${error.msg}`); process.exit(1); }
+
+			var json_ret = JSON.parse(ret.content);
+
+			//compose the content for the output
+			if ( args['json'] === true ) { //generate content in json format
+				var content = `{ "result": "${json_ret['result']}" }`;
+			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
+				var content = `{ "workMode": "${workMode}", "result": "${ret.verified}", "poolIdHex": "${scopePoolIdHex}", "calidusPublicKey": "${calidusPubKeyHex}", "publicKey": "${pubKeyHex}",`;
+				content += `"nonce": ${payloadMap.get(4)}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "isHashed": "${json_ret['isHashed']}", "verifyDataHex": "${verifyDataHex}",`;
+				content += `"coseSign1Hex": "${coseSign1Hex}", "coseKeyHex": "${coseKeyHex}", "coseSignature": "${json_ret['signature']}" }`;
+			} else { //generate content in text format
+				var content = `${json_ret['result']}`;
+			}
+
+			//output the content to the console or to a file
+			var out_file = args['out-file'];
+		        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
+			if ( typeof out_file === 'undefined' || out_file == '' ) { console.log(content);} //Output to console
+			else { //else try to write the content out to the given file
+				try {
+					fs.writeFileSync(out_file,content, 'utf8')
+					// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
 
 			break;
 

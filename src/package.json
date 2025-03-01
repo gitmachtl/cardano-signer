@@ -1,6 +1,6 @@
 {
   "name": "cardano-signer",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "description": "cardano-signer signs a given data(hex/text/file) with a signing key(hex/bech/file) or verify the signature via a public key(hex/bech/file). it can also produce a cip-8/cip-30/cip-36 conform payload signing/verification. can produce ed25519 keys from mnemonic for payment, staking, drep, constitutional commitee cold/hot keys, etc...",
   "main": "cardano-signer.js",
   "scripts": {
@@ -9,7 +9,7 @@
   "author": "@gitmachtl - ATADA Stakepools Austria",
   "license": "MIT",
   "dependencies": {
-    "@emurgo/cardano-serialization-lib-nodejs": "^14.1.0",
+    "@emurgo/cardano-serialization-lib-nodejs": "^14.1.1",
     "base64url": "^3.0.1",
     "bech32": "^2.0.0",
     "bip39": "^3.1.0",
