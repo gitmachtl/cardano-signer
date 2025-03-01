@@ -1,4 +1,4 @@
-# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from (Hardware)-Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119
+# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from (Hardware)-Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119, Generate and Verify CIP-88v2 Calidus-Pool-Key data
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -15,12 +15,14 @@
 * Sign CIP-100/108/119 governacne metadata by adding an authors signature to the document
 * Generate CIP-36 voting-keys.
 * A given address will automatically be checked against the used publicKey.
+* Generate **CIP-88v2 Calidus Pool-Key** registration metadata in CBOR and JSON format
 
 ### What can cardano-signer verify?
 * **Verify** a signature for any hexdata, textdata or binaryfile together with a provided public key. Also an optional address can be verified against the given public key. The key can be provided in hex, bech or file format. The verification output is true(exitcode=0) or false(exitcode=1) as a console output or in json-format.
 * The signature can be provided in hex format or also in bech encoded `ed25519_sig` format. **Cardano-signer can be used instead of jcli for verification**.
 * Verify **CIP-8 / CIP-30** COSE_Sign1/COSE_Key data. With hashed or non-hashed payloads. There is also a detailed check on the COSE_Sign1 and COSE_Key data structure included. Verification can be done on the COSE_Sign1 + COSE_Key, or COSE_Sign1 + COSE_Key + payload and/or address.
 * Verify **CIP-100/108/119** metadata JSONLD files
+* Verify **CIP-88v2 Calidus Pool-Key** registration metadata in CBOR and JSON format
 
 &nbsp;<p>
 
@@ -30,6 +32,7 @@
 * **[CIP-36 mode](#cip-36-mode-catalyst-voting-registration--votingpower-delegation)**: Generate Catalyst metadata for registration/delegation and also deregistration
 * **[KeyGeneration mode](#keygeneration-mode)**: Generate Cardano keys from mnemonics and derivation-paths, also from Ledger/Trezor-HardwareWallets
 * **[CIP-100 / CIP-108 / CIP-119 mode](#cip-100--cip-108--cip-119-mode)**: Sign, Verify and Canonize governance metadata
+* **[CIP-88v2 Calidus Pool-Key](#cip-88v2-calidus-pool-key-mode)**: Sign & Verify Calidus Key registration metadata
 &nbsp;<p>
 
 ## Full syntax
@@ -1524,7 +1527,162 @@ cardano-signer canonize --cip100 \
 ```
 And of course you can write out the plaintext or json output also directly to a file like with the other functions. This is simply done by using the `--out-file` parameter.
 
+<p>&nbsp;<p>&nbsp;
+
+# CIP-88v2 Calidus Pool-Key mode
+
+Cardano-Signer can Sign and Verify the so called Calidus Pool-Key registration metadata. The Calidus Pool-Key is used to identify/authorize pool ownership for public/private services without the need to go thru a VRF-Secret-Key signing process.
+The Calidus Pool-Key can be used on the CLI and with LightWallets directly in the Browser for Identification/Login/Authorization/etc. If you wanna update to a new Calidus Key, just generate a new one and register it for the pool.
+You only need to sign the registration metadata once with your Stakepool Cold-Key, after that you can use the Calidus Key for various services on a daily base. No need to use the Stakepool Cold-Key or the VRF Secret-Key anymore.
+Its a standard ed25519 signing/verification in the end, so there are plenty of libs available for the integration in own services/dApps.
+
+## *Signing - Generate the registration metadata*
+
+![image](https://github.com/user-attachments/assets/35e7db4d-c744-4b19-bb03-257d20492b3b)
+
+Generating the registration metadata with Cardano-Signer is easy. All you need is the Calidus Public-Key as a `*.vkey` file, hex or bech format. You also need the Stakepool Cold-Key for the signing.
+
+### 1. Generate a new Calidus Key with Mnemonics
+
+If there is not already a Calidus Key, than we have to generate a new one first. Its a good idea to directly do this with mnemonics generation, so you can import those mnemonics later on in a LightWallet.
+We can use the standard `--path payment` for this. Lets generate ourself a new Calidus key with the name `myCalidusKey`:
+
+``` console
+cardano-signer keygen --path payment \
+	--out-skey myCalidusKey.skey \
+	--out-vkey myCalidusKey.vkey \
+	--json-extended
+```
+The output in json format:
+``` json
+{
+  "workMode": "keygen",
+  "derivationPath": "1852H/1815H/0H/0/0",
+  "derivationType": "icarus",
+  "mnemonics": "cinnamon brief fuel rotate horror author film noble enough priority hat wide glimpse occur clutch motor marble manage donor say bronze coach bamboo crime",
+  "rootKey": "a85b969997cb688b51c2f6d7acfb0709e34ac5acd75899c9e24c0027dc329d5474d09224ae7f0cf81424c71452db9632647e1185aa10fa14b9dc7f0c54acb404ba255eff1175274f86892fffa07dffdf346bd80b543e50b71bb74aaaef88d0ea",
+  "secretKey": "1053a319c116a0d2a1598a942c62741c275558512d72a8723f41c317e7329d5415fb9a06bdef60b5b65e86f20aa92e80d3af1e3e6684d760b2de7681af904ee7699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa0ed434d5f7998854cf1073e74e29078feaa93909f4e12d1c6e8d1e3ac977b9ac",
+  "publicKey": "699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa",
+  "XpubKeyHex": "8799250d456ac16ea07df64f7868e4c37160b0a1497f6c569d00b388f69186477f501827598a57f204bd5552abc444ffa8e3c216a9ab96f622a89aef598c3804",
+  "XpubKeyBech": "xpub1s7vj2r29dtqkagra7e8hs68ycdckpv9pf9lkc45aqzec3a53serh75qcyavc54ljqj74254tc3z0l28rcgt2n2uk7c323xh0txxrspq0jdyqy",
+  "output": {
+    "skey": {
+      "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
+      "description": "Payment Signing Key",
+      "cborHex": "58801053a319c116a0d2a1598a942c62741c275558512d72a8723f41c317e7329d5415fb9a06bdef60b5b65e86f20aa92e80d3af1e3e6684d760b2de7681af904ee7699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa0ed434d5f7998854cf1073e74e29078feaa93909f4e12d1c6e8d1e3ac977b9ac"
+    },
+    "vkey": {
+      "type": "PaymentVerificationKeyShelley_ed25519",
+      "description": "Payment Verification Key",
+      "cborHex": "5820699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa"
+    }
+  }
+}
+```
+
+Cardano-Signer generated a new key-pair for you `myCalidusKey.skey & myCalidusKey.vkey`. You can also see the used mnemonics for the key generation. This mnemonic can be reused in a LightWallet of your choice.
+
+### 2. Generate the registration metadata
+
+Now that we have a Calidus Key ready, we can generate the registration metadata in JSON or CBOR format. If you wanna take a look at it, just use the JSON format.
+
+As stated above, we need the Calidus Public-Key and the Stakepool Cold-Key for this. In addition you can provide a unique `nonce` to the signer, this `nonce` must be a number higher than your old registration.
+In case there is no nonce parameter provided, Cardano-Signer will automatically use the Cardano MainNet slotheight for this. The signature is generated via the CIP8/30 messageSign method, so this can also be used for Stakepool Keys on a Hardware-Wallet.
+A special mode for this will follow in an upcoming release.
+
+``` console
+cardano-signer sign --cip88 \
+	--calidus-public-key myCalidusKey.vkey \
+	--secret-key myPoolCold.skey \
+        --json \
+	--out-file myCalidusRegistrationMetadata.json
+```
+The output file `myCalidusRegistrationMetadata.json`:
+``` json
+{
+  "867": {
+    "0": 2,
+    "1": {
+      "1": [
+        1,
+        "0x172641c2c66128b5324be1cb663b8acb3cd66bc808276fd2813ba227"
+      ],
+      "2": [],
+      "3": [
+        2
+      ],
+      "4": 149261016,
+      "7": "0x699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa"
+    },
+    "2": [
+      {
+        "1": {
+          "1": 1,
+          "3": -8,
+          "-1": 6,
+          "-2": "0xce43a34542403e9f61f6384dbe1f3e21c047e050f56aa2c04daaecb4e5340a09"
+        },
+        "2": [
+          "0xa201276761646472657373581c172641c2c66128b5324be1cb663b8acb3cd66bc808276fd2813ba227",
+          0,
+          "0xaff90146c0b74f1288437fa5a8c2915ea0a24d6e8d0f83a05fbbb46fecf0a7f6",
+          "0x5e748ae8602721ad179865b8e678918689d236da7a0d45b4f445c93ca287751bc9091ace25fcb6ef4feb61052809b9a0265c0dd7cdec5e2dc938ba15e78bce0b"
+        ]
+      }
+    ]
+  }
+}
+```
+
+This is the signed registration metadata. All that is left is to use it in a transaction on the Cardano Blockchain.
+
+In case you wanna link more than one pool to the same Calidus Key, just generate another registration metadata signed with the 2nd Pool Cold-Key but using the same Calidus Key.
+
 <br>
+
+## *Verify - Calidus Key registration metadata*
+
+![image](https://github.com/user-attachments/assets/b4387810-bbf5-472a-b0af-4494afaa72f6)
+
+It is of course also possible to verify registration metadata. This metadata can be provided in form of a JSON-File, JSON-Plaintext or as a CBOR-HexString.
+
+### Verify registration metadata provided as a JSON-File
+
+We can show the usecase with the registration file we used in the above signing example:
+
+``` console
+cardano-signer verify --cip88 \
+	--data-file myCalidusRegistrationMetadata.json \
+	--json-extended
+```
+The output in json format:
+``` json
+{
+  "workMode": "verify-cip88",
+  "result": "true",
+  "poolIdHex": "172641c2c66128b5324be1cb663b8acb3cd66bc808276fd2813ba227",
+  "calidusPublicKey": "699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa",
+  "publicKey": "ce43a34542403e9f61f6384dbe1f3e21c047e050f56aa2c04daaecb4e5340a09",
+  "nonce": 149261016,
+  "payloadCbor": "a5018201581c172641c2c66128b5324be1cb663b8acb3cd66bc808276fd2813ba2270280038102041a08e58ad8075820699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa",
+  "payloadHash": "aff90146c0b74f1288437fa5a8c2915ea0a24d6e8d0f83a05fbbb46fecf0a7f6",
+  "isHashed": "false",
+  "verifyDataHex": "aff90146c0b74f1288437fa5a8c2915ea0a24d6e8d0f83a05fbbb46fecf0a7f6",
+  "coseSign1Hex": "845829a201276761646472657373581c172641c2c66128b5324be1cb663b8acb3cd66bc808276fd2813ba227a166686173686564f45820aff90146c0b74f1288437fa5a8c2915ea0a24d6e8d0f83a05fbbb46fecf0a7f658405e748ae8602721ad179865b8e678918689d236da7a0d45b4f445c93ca287751bc9091ace25fcb6ef4feb61052809b9a0265c0dd7cdec5e2dc938ba15e78bce0b",
+  "coseKeyHex": "a4010103272006215820ce43a34542403e9f61f6384dbe1f3e21c047e050f56aa2c04daaecb4e5340a09",
+  "coseSignature": "5e748ae8602721ad179865b8e678918689d236da7a0d45b4f445c93ca287751bc9091ace25fcb6ef4feb61052809b9a0265c0dd7cdec5e2dc938ba15e78bce0b"
+}
+```
+
+This is the extended json output with a lot of data in case you wanna use it in your own application. If you wanna check the registration metadata validity, you can run:
+``` console
+cardano-signer verify --cip88 \
+	--data-file myCalidusRegistrationMetadata.json
+```
+```
+true
+```
+
 
 ## Contacts
 
