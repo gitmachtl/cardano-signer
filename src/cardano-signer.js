@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.23.0"
+const version = "1.24.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -17,7 +17,7 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 //set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
 	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor'], //all booleans are set to false per default
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps'], //all booleans are set to false per default
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
 	unknown: function(unknownParameter) {
@@ -166,6 +166,7 @@ switch (topic) {
 		console.log(`								${Dim}optional data/payload/file if not present in the COSE_Sign1 signature${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional signing-address to do the verification with${Reset}`);
 		console.log(`           [${FgGreen}--nohashcheck${Reset}]					${Dim}optional flag to not perform a check that the public-key belongs to the address/hash${Reset}`);
+		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"true/false" (exitcode 0/1)${Reset} or ${FgCyan}JSON-Format${Reset}`)
@@ -208,7 +209,8 @@ switch (topic) {
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}keygen${Reset}`);
 		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
-		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot, --path pool${Reset}`);
+		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold,${Reset}`);
+		console.log(`								${Dim}                     --path cc-hot, --path pool, --path calidus${Reset}`);
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor${Reset}] 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
@@ -460,6 +462,7 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 					case '13': addr_type = 'committee-cold script cip129'; break hashcheck; break;
 					case '22': addr_type = 'drep cip129'; break hashcheck; break;
 					case '23': addr_type = 'drep script cip129'; break hashcheck; break;
+					case 'a1': addr_type = 'calidus pool key'; break hashcheck; break;
 				}
 			}
 
@@ -596,9 +599,15 @@ const jsToMap = (obj) => {
     }
 }
 
-
-
-
+const mapToJs = (obj) => {
+	return JSON.stringify(obj, function (key, value) {
+		if (value instanceof Map) { return Object.fromEntries(value) }
+		else if (value instanceof Set) { const setArray = []; for( const item of value.values()){setArray.push(item)}; return setArray }
+		else if (value == null) { return null }
+		else if (value['type'] == 'Buffer') { return `0x${Buffer.from(value['data']).toString('hex')}` }
+		return value
+  })
+}
 
 // VERIFY CIP8/30 FUNCTION -> coded as a function so it can be reused within other functions
 function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(3)) { //default calling arguments are the same as calling the main process - can be modified by subfunctions
@@ -761,7 +770,6 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 				var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(signature_hex);
 				} catch (error) { throw {'msg': `${error}`}; }
 
-
 			//generate the protectedHeader with the current values (the address within it might have been overwritten by a given one)
 			// alg (1) - must be set to EdDSA (-8)
 			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
@@ -792,8 +800,10 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 				if ( payload_data_hex.length <= 2000000 ) { content += `"payloadDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex if it is less than 2M of chars
 				content += `"isHashed": "${isHashed}",`;
 				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"verifyDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
-				content += `"signature": "${signature_hex}",`;
-				content += `"publicKey": "${pubKey}" }`
+				content += `"signature": "${signature_hex}", "publicKey": "${pubKey}"`;
+				if ( sub_args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
+					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)} }` }
+				content += ` }`
 			} else { //generate content in text format
 				var content = `${verified}`;
 			}
@@ -1449,6 +1459,10 @@ async function main() {
 			var calidusPubKey = CardanoWasm.PublicKey.from_bytes(Buffer.from(calidusPubKeyHex,'hex'));
 			} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
 
+			//generate the calidus-id in hex and bech format
+			var calidusIdHex = `a1${getHash(calidusPubKeyHex, 28)}`; //hash the calidus publicKey with blake2b_224 (28bytes digest length) and add the prebyte a1=CalidusPoolKey
+			var calidusIdBech = bech32.encode("calidus", bech32.toWords(Buffer.from(calidusIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
 			//get secret key -> store it in prvKeyHex
 			var key_file_hex = args['secret-key'];
 		        if ( typeof key_file_hex === 'undefined' || key_file_hex === true ) { console.error(`Error: Missing secret key parameter`); showUsage(workMode); }
@@ -1467,6 +1481,7 @@ async function main() {
 
 			//calculate the pool-id, which is just the hash of the pubKey
 			var poolIdHex = getHash(pubKeyHex,28)
+			var poolIdBech = bech32.encode("pool", bech32.toWords(Buffer.from(poolIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
 
 			//get the --nonce parameter
 			var nonce = args['nonce'];
@@ -1515,19 +1530,15 @@ async function main() {
 			//compose the content for the output as JSON registration, extended JSON data or plain registrationCBOR
 			if ( args['json'] === true ) { //generate content in json format
 
-				var content_payload = `{ "1": [ 1, "0x${poolIdHex}" ], "2": [], "3": [2], "4": ${nonce}, "7": "0x${calidusPubKeyHex}" }`;
-				var content_witness_public = `{ "1": 1, "3": -8, "-1": 6, "-2": "0x${pubKeyHex}" }`;
-				var content_witness_signature = `[ "0x` + Buffer.from(coseSign1Map[0]).toString('hex') + `", ${coseSign1Map[1]}, "0x` + Buffer.from(coseSign1Map[2]).toString('hex') + `", "0x` + Buffer.from(coseSign1Map[3]).toString('hex') + `" ]`;
-				var content = `{ "867": { "0": 2, "1": ${content_payload}, "2": [ { "1": ${content_witness_public}, "2": ${content_witness_signature} } ] } }`;
-				// content = JSON.stringify(JSON.parse(content_json), null, 4); //just to make a pretty json output
+				var content = mapToJs(registrationMap)
 
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 
-				var content_payload = `{ "1": [ 1, "0x${poolIdHex}" ], "2": [], "3": [2], "4": ${nonce}, "7": "0x${calidusPubKeyHex}" }`;
-				var content_witness_public = `{ "1": 1, "3": -8, "-1": 6, "-2": "0x${pubKeyHex}" }`;
-				var content_witness_signature = `[ "0x` + Buffer.from(coseSign1Map[0]).toString('hex') + `", ${coseSign1Map[1]}, "0x` + Buffer.from(coseSign1Map[2]).toString('hex') + `", "0x` + Buffer.from(coseSign1Map[3]).toString('hex') + `" ]`;
-				var content_output_json = `{ "867": { "0": 2, "1": ${content_payload}, "2": [ { "1": ${content_witness_public}, "2": ${content_witness_signature} } ] } }`;
-				var content = `{ "workMode": "${workMode}", "poolIdHex": "${poolIdHex}", "calidusPublicKey": "${calidusPubKeyHex}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}", "nonce": ${nonce}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "coseSign1Hex": "${ret.cose_sign1_cbor_hex}", "coseKeyHex": "${ret.cose_key_cbor_hex}", "output": { "cbor": "${registrationCborHex}", "json": ${content_output_json} } }`;
+				var content = `{ "workMode": "${workMode}", "poolIdHex": "${poolIdHex}", "poolIdBech": "${poolIdBech}",`;
+				content += `"calidusPublicKey": "${calidusPubKeyHex}", "calidusIdHex": "${calidusIdHex}", "calidusIdBech": "${calidusIdBech}",`;
+				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}", "nonce": ${nonce}, "payloadCbor": "${payloadCborHex}",`;
+				content += `"payloadHash": "${payloadCborHash}", "coseSign1Hex": "${ret.cose_sign1_cbor_hex}", "coseKeyHex": "${ret.cose_key_cbor_hex}",`;
+				content += `"output": { "cbor": "${registrationCborHex}", "json": ${mapToJs(registrationMap)} } }`;
 
 			} else { //generate content in text format
 				var content = `${registrationCborHex}`;
@@ -1716,6 +1727,7 @@ async function main() {
 					case 'CC-COLD': derivation_path = '1852H/1815H/0H/4/0'; break;
 					case 'CC-HOT': derivation_path = '1852H/1815H/0H/5/0'; break;
 					case 'POOL': derivation_path = '1853H/1815H/0H/0H'; break;
+					case 'CALIDUS': derivation_path = '1852H/1815H/0H/0/0'; break;
 				}
 
 				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
@@ -1976,14 +1988,28 @@ async function main() {
 
 
 						default: //looks like a payment key
-							var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
 
+							switch (args['path'].toUpperCase()) {
+
+								case 'CALIDUS': //path is --path calidus -> generate the calidusID and special description for the skey/vkey content
+									var calidusIdHex = `a1${getHash(pubKeyHex, 28)}`; //hash the publicKey with blake2b_224 (28bytes digest length) and add the prebyte a1=CalidusPoolKey
+									var calidusIdBech = bech32.encode("calidus", bech32.toWords(Buffer.from(calidusIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+									var keyFileDescription = "Calidus Pool"
+									break;
+
+								default: //standard payment key
+									var keyFileDescription = "Payment"
+									break;
+
+							} //switch args['path']
+
+							var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "${keyFileDescription} Signing Key", "cborHex": "${prvKeyCbor}" }`;
 							if ( args['vkey-extended'] === true ) {
-								var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "${keyFileDescription} Verification Key", "cborHex": "${pubKeyCbor}" }`;
 							} else {
-								var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+								var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "${keyFileDescription} Verification Key", "cborHex": "${pubKeyCbor}" }`;
 							}
-
+							break;
 
 					} //switch (derivation_path.split('/')[3])
 					break;
@@ -2033,6 +2059,7 @@ async function main() {
 				else if ( ccColdIdHex != '' ) { content += `, "ccColdIdHex": "${ccColdIdHex}", "ccColdIdBech": "${ccColdIdBech}"`; }
 				else if ( ccHotIdHex != '' ) { content += `, "ccHotIdHex": "${ccHotIdHex}", "ccHotIdBech": "${ccHotIdBech}"`; }
 				else if ( poolIdHex != '' ) { content += `, "poolIdHex": "${poolIdHex}", "poolIdBech": "${poolIdBech}"`; }
+				else if ( calidusIdHex != '' ) { content += `, "calidusIdHex": "${calidusIdHex}", "calidusIdBech": "${calidusIdBech}"`; }
 				if ( prvKeyBech != '' ) { content += `, "secretKeyBech": "${prvKeyBech}", "publicKeyBech": "${pubKeyBech}"`; }
 				content += `, "output": { "skey": ${skeyContent}, "vkey": ${vkeyContent} } }`
 			} else { //generate content in text format
@@ -2551,7 +2578,7 @@ async function main() {
 			else if ( ! payloadMap.get(1) instanceof Array || payloadMap.get(1)[0] != 1 ) { console.error(`Error: PayloadMap key 1 (registraction-scope) is not an array or not of type pool-scope(1)`); process.exit(1); }
 			else if ( ! payloadMap.get(3) instanceof Array || isNaN(payloadMap.get(3)[0]) || payloadMap.get(3)[0] != 2) { console.error(`Error: PayloadMap key 3 (validation method) is not an array and/or not set to [2] -> CIP-0008`); process.exit(1); }
 			else if ( isNaN(payloadMap.get(4)) ) { console.error(`Error: PayloadMap key 4 (nonce) is not a uint number`); process.exit(1); }
-			else if ( ! Buffer.isBuffer(payloadMap.get(7)) || payloadMap.get(7).length != 32 ) { console.error(`Error: PayloadMap key 7 (update-public-key) is not a hex bytearray/buffer of length 32`); process.exit(1); }
+			else if ( ! Buffer.isBuffer(payloadMap.get(7)) || payloadMap.get(7).length != 32 ) { console.error(`Error: PayloadMap key 7 (calidus-public-key) is not a hex bytearray/buffer of length 32`); process.exit(1); }
 
 			//get the poolid from the scope=1 content and check that its a bytearray with the correct length
 			var scopePoolId = payloadMap.get(1)[1] //   [ 1 , h'(poolid-hex)' ]
@@ -2562,7 +2589,7 @@ async function main() {
                         try {
                         	var calidusPubKey = CardanoWasm.PublicKey.from_bytes(payloadMap.get(7));
 				var calidusPubKeyHex = payloadMap.get(7).toString('hex')
-                        } catch (error) { console.error(`Error: PayloadMap key 7 (update-public-key) -> ${error}`); process.exit(1); }
+                        } catch (error) { console.error(`Error: PayloadMap key 7 (calidus-public-key) -> ${error}`); process.exit(1); }
 
 			//ok, the payloadMap should be fine, lets generate the cbor representation of it and also the hash for the message verification
 			var payloadCborHex = cbor.encode(payloadMap).toString('hex');
@@ -2622,9 +2649,19 @@ async function main() {
 			if ( args['json'] === true ) { //generate content in json format
 				var content = `{ "result": "${json_ret['result']}" }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
-				var content = `{ "workMode": "${workMode}", "result": "${ret.verified}", "poolIdHex": "${scopePoolIdHex}", "calidusPublicKey": "${calidusPubKeyHex}", "publicKey": "${pubKeyHex}",`;
-				content += `"nonce": ${payloadMap.get(4)}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "isHashed": "${json_ret['isHashed']}", "verifyDataHex": "${verifyDataHex}",`;
+
+				//generate the calidus-id in hex and bech format for the json-extended output
+				var calidusIdHex = `a1${getHash(calidusPubKeyHex, 28)}`; //hash the calidus publicKey with blake2b_224 (28bytes digest length) and add the prebyte a1=CalidusPoolKey
+				var calidusIdBech = bech32.encode("calidus", bech32.toWords(Buffer.from(calidusIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
+				//generate the bech pool-id for the json-extended output
+				var poolIdBech = bech32.encode("pool", bech32.toWords(Buffer.from(scopePoolIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+
+				var content = `{ "workMode": "${workMode}", "result": "${ret.verified}", "poolIdHex": "${scopePoolIdHex}", "poolIdBech": "${poolIdBech}", `;
+				content += `"calidusPublicKey": "${calidusPubKeyHex}", "calidusIdHex": "${calidusIdHex}", "calidusIdBech": "${calidusIdBech}", "publicKey": "${pubKeyHex}", `;
+				content += `"nonce": ${payloadMap.get(4)}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "isHashed": "${json_ret['isHashed']}", "verifyDataHex": "${verifyDataHex}", `;
 				content += `"coseSign1Hex": "${coseSign1Hex}", "coseKeyHex": "${coseKeyHex}", "coseSignature": "${json_ret['signature']}" }`;
+
 			} else { //generate content in text format
 				var content = `${json_ret['result']}`;
 			}
