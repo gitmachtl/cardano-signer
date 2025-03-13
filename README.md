@@ -1545,7 +1545,7 @@ Generating the registration metadata with Cardano-Signer is easy. All you need i
 ### 1. Generate a new Calidus Key with Mnemonics
 
 If there is not already a Calidus Key, than we have to generate a new one first. Its a good idea to directly do this with mnemonics generation, so you can import those mnemonics later on in a LightWallet.
-We can use the standard `--path payment` for this. Lets generate ourself a new Calidus key with the name `myCalidusKey`:
+We can use the standard `--path calidus` for this. Lets generate ourself a new Calidus key with the name `myCalidusKey`:
 
 ``` console
 cardano-signer keygen --path calidus \
