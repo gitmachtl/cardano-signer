@@ -1548,7 +1548,7 @@ If there is not already a Calidus Key, than we have to generate a new one first.
 We can use the standard `--path payment` for this. Lets generate ourself a new Calidus key with the name `myCalidusKey`:
 
 ``` console
-cardano-signer keygen --path payment \
+cardano-signer keygen --path calidus \
 	--out-skey myCalidusKey.skey \
 	--out-vkey myCalidusKey.vkey \
 	--json-extended
@@ -1568,12 +1568,12 @@ The output in json format:
   "output": {
     "skey": {
       "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
-      "description": "Payment Signing Key",
+      "description": "Calidus Pool Signing Key",
       "cborHex": "58801053a319c116a0d2a1598a942c62741c275558512d72a8723f41c317e7329d5415fb9a06bdef60b5b65e86f20aa92e80d3af1e3e6684d760b2de7681af904ee7699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa0ed434d5f7998854cf1073e74e29078feaa93909f4e12d1c6e8d1e3ac977b9ac"
     },
     "vkey": {
       "type": "PaymentVerificationKeyShelley_ed25519",
-      "description": "Payment Verification Key",
+      "description": "Calidus Pool Verification Key",
       "cborHex": "5820699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa"
     }
   }
