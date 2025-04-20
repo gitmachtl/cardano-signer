@@ -1,5 +1,27 @@
 ## Release Notes / Change-Logs
 
+* **1.24.1**
+
+  #### CIP8/30 Updates
+
+  - The CIP8/30 verification function now handles all set keys in the `protected header`. In the past the `protected header` was rebuilt for internal verification using only the `alg (map 1)` and `address` key entry.<br>Which could have caused an issue if Signature-Generators add additional keys in the `protected header`, like the optional `kid (map 4)` entry.<br>Now cardano-signer handles the header as it is and only replaces entries in the address and kid keys if an optional verification address is provided.
+    
+
+* **1.24.0**
+
+   #### Calidus Pool-Key updates
+
+   - A new path shortcut `--path calidus` was added to the `keygen` function
+   - Using the new calidus path also switches the output description of skey/vkey files to be `Calidus Pool Signing Key` and `Calidus Pool Verification Key`
+   - Using the new calidus path also outputs the new `Calidus-ID` in hex and bech format with the `--json-extended` flag
+   - The `sign --cip88` function to generate Calidus Key registration data now also outputs the new `Calidus-ID` in hex and bech format. In addition it also outputs the `Pool-ID` in bech format.
+   - The `verify --cip88` function to verify Calidus Key registration data now also outputs the new `Calidus-ID` in hex and bech format. In addition it also outputs the `Pool-ID` in bech format.
+
+   #### Other updates
+
+   - A new internal function was created to convert maps in to json format, this is simplifying various inputs and output in the future
+   - The key7 entry for the CIP88v2 format was renamed from `update-key` to `calidus-key`
+
 * **1.23.0**
   
   #### NEW FUNCTION - Sign/Verify Calidus Pool-Key registration metadata (CIP88v2)
