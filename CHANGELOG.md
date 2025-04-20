@@ -5,6 +5,7 @@
   #### CIP8/30 Updates
 
   - The CIP8/30 verification function now handles all set keys in the `protected header`. In the past the `protected header` was rebuilt for internal verification using only the `alg (map 1)` and `address` key entry.<br>Which could have caused an issue if Signature-Generators add additional keys in the `protected header`, like the optional `kid (map 4)` entry.<br>Now cardano-signer handles the header as it is and only replaces entries in the address and kid keys if an optional verification address is provided.
+  - The *protected header map* is now also included in the `--json-extended` output for the `verify cip-8/30` command if you set the `--include-maps` flag.
     
 
 * **1.24.0**
