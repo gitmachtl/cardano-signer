@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.24.0"
+const version = "1.24.1"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -718,7 +718,10 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 		                        if ( ( sub_args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
 		                                throw {'msg': `The given ${sign_addr.type} address '${sign_addr.addr}' does not belong to the public key in the COSE_Key.`};
 					}
-
+					//replace the 'address' map in the protectedHeader with the given one
+					protectedHeader.set('address',Buffer.from(sign_addr.hex,'hex'));
+					//check if the optional kid (map4) "key-identifier" was also supplied in the protectedHeader. if so, also replace that entry
+					if ( protectedHeader.has(4) ) { protectedHeader.set(4,Buffer.from(sign_addr.hex,'hex')); }
 				} else {
 					//read the sign_addr from the protectedHeader
 				        sign_addr = readAddr2hex(sign_addr_buffer.toString('hex'), pubKey);
@@ -774,7 +777,9 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 			// alg (1) - must be set to EdDSA (-8)
 			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
 			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
-			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
+//			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
+//			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set(4,Buffer.from(sign_addr.hex,'hex')).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
+			var protectedHeader_cbor_hex = cbor.encode(protectedHeader).toString('hex')
 
 			//generate the data to verify, as a serialized cbor of the Sig_structure
 			//Sig_structure = [
@@ -802,7 +807,7 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"verifyDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
 				content += `"signature": "${signature_hex}", "publicKey": "${pubKey}"`;
 				if ( sub_args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
-					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)} }` }
+					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)}, "protectedHeader": ${mapToJs(protectedHeader)} }` }
 				content += ` }`
 			} else { //generate content in text format
 				var content = `${verified}`;
