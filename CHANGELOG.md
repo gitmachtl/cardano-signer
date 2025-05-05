@@ -1,5 +1,12 @@
 ## Release Notes / Change-Logs
 
+* **1.24.2**
+
+  #### Bugfixes
+
+  - improved handling of integer key values when converting from json to cbor
+  - default path 'payment'  for keygen was broken
+
 * **1.24.1**
 
   #### CIP8/30 Updates
