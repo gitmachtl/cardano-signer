@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.24.1"
+const version = "1.24.2"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -36,6 +36,7 @@ const args = require('minimist')(process.argv.slice(3),parse_options); //slice(3
 const regExpHex = /^[0-9a-fA-F]+$/;
 const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;
 const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
+const regExpIntNumber = /^-?[0-9]+$/; //matches positive and optional negative integer numbers
 
 //catch all exceptions that are not catched via try
 process.on('uncaughtException', function (error) {
@@ -586,8 +587,8 @@ const jsToMap = (obj) => {
             } else {
                 const myMap = new Map();
                 for (const [key, value] of Object.entries(obj)) {
-                    const intKey = parseInt(key);
-                    myMap.set(intKey, jsToMap(value));
+			// check if key is a pos or neg integer number, if so, use the key as a number and not as a string
+			if (regExpIntNumber.test(key)) { myMap.set(parseInt(key), jsToMap(value)) } else { myMap.set(key, jsToMap(value)); }
                 }
                 return myMap;
             }
@@ -1722,6 +1723,7 @@ async function main() {
 			var derivation_path = args['path'];
 		        if ( typeof derivation_path === 'string' && derivation_path != '' ) { //ok, a path was provided let check
 				derivation_path = trimString(derivation_path.toUpperCase());
+				var derivation_path_arg = derivation_path
 
 				//predefined derivation paths via name
 				switch (derivation_path) {
@@ -1739,8 +1741,8 @@ async function main() {
 				if ( ! regExpPath.test(derivation_path) ) { console.error(`Error: The provided derivation --path '${derivation_path}' does not match the right format! Example: 1852H/1815H/0H/0/0`); process.exit(1); }
 			} else {
 				var derivation_path = ''; //no path provided, set the derivation_path variable to be empty
+				var derivation_path_arg = derivation_path
 			}
-
 
 			//load or overwrite derivation path if CIP36 vote keys are selected
 			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0' }
@@ -1992,9 +1994,9 @@ async function main() {
 							break;
 
 
-						default: //looks like a payment key
+						default: //looks like a payment key, but recheck the provided derivation path argument
 
-							switch (args['path'].toUpperCase()) {
+							switch (derivation_path_arg) {
 
 								case 'CALIDUS': //path is --path calidus -> generate the calidusID and special description for the skey/vkey content
 									var calidusIdHex = `a1${getHash(pubKeyHex, 28)}`; //hash the publicKey with blake2b_224 (28bytes digest length) and add the prebyte a1=CalidusPoolKey
