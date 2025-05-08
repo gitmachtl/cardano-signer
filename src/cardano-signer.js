@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.24.2"
+const version = "1.24.3"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -129,7 +129,7 @@ switch (topic) {
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
-		console.log(`								${Dim}data or file in jsonld format to verify${Reset}`);
+		console.log(`								${Dim}data or file in jsonld format to sign${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 		console.log(`           ${FgGreen}--author-name${Reset} "<name-of-signing-author>"		${Dim}name of the signing author f.e. "John Doe"${Reset}`);
 		console.log(`           [${FgGreen}--replace${Reset}]						${Dim}optional flag to replace the authors entry with the same public-key${Reset}`);
@@ -2511,17 +2511,18 @@ async function main() {
 					//set the authors field in the JSONLD content
 					jsonld_input["authors"] = authors_array;
 
-					var content = JSON.stringify(jsonld_input, null, 2);
+					//compose the final json output
+					var content = JSON.stringify(jsonld_input, null, 2) + '\n'; //always add a NewLine at the end to make it more robust against re-opening in editors
 
 					//output the content to the console or to a file
 					var out_file = args['out-file'];
 				        //if there is no --out-file parameter specified or the parameter alone (true) then output to the console
-					if ( typeof out_file === 'undefined' || out_file == '' ) { console.log(content);} //Output to console
+					if ( typeof out_file === 'undefined' || out_file == '' ) { process.stdout.write(content);} //Output to stdout
 					else { //else try to write the content out to the given file
 						try {
-						fs.writeFileSync(out_file,content, 'utf8')
+						fs.writeFileSync(out_file, content, 'utf8')
 						// file written successfully
-						var anchorHash = getHash(Buffer.from(content));
+						var anchorHash = getHash(Buffer.from(Buffer.from(content).toString('utf8'))); // use the content also in utf-8 format like the written output
 						console.log(`{ "workMode": "${workMode}", "outFile": "${out_file}", "anchorHash": "${anchorHash}" }`);
 						} catch (error) { console.error(`${error}`); process.exit(1); }
 					}

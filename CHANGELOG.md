@@ -1,5 +1,11 @@
 ## Release Notes / Change-Logs
 
+* **1.24.3**
+
+  #### CIP-100 Author-Signing
+
+  - the generated output metadata json now always includes a NewLine/LineFeed at the end to make it more robust against re-opening in editors (fixes https://github.com/gitmachtl/cardano-signer/issues/4)
+
 * **1.24.2**
 
   #### Bugfixes
