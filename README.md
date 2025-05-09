@@ -1,4 +1,4 @@
-# Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from (Hardware)-Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119, Generate and Verify CIP-88v2 Calidus-Pool-Key data
+## Sign & verify data with a Cardano Secret/Public-Key<br>Sign & verify CIP-8, CIP-30 & CIP-36 data (Catalyst)<br>Generate Cardano-Keys from (Hardware)-Mnemonics and Derivation-Paths<br>Canonize, Hash & Sign Governance Metadata CIP-100/108/119<br>Generate and Verify CIP-88v2 Calidus-Pool-Key data
 
 <img src="https://user-images.githubusercontent.com/47434720/190806957-114b1342-7392-4256-9c5b-c65fc0068659.png" align=right width=40%></img>
 
@@ -41,7 +41,7 @@
 
 $ cardano-signer help
 
-cardano-signer 1.20.0
+cardano-signer 1.24.3
 
 Sign a hex/text-string or a binary-file:
 
@@ -90,11 +90,23 @@ Sign a catalyst registration/delegation or deregistration in CIP-36 mode:
    Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
 
 
-Sign a governance JSON-LD metadata file with a Secret-Key (add authors):
+Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88 mode:
+
+   Syntax: cardano-signer sign --cip88
+   Params: --calidus-public-key "<path_to_file>|<hex>|<bech>"   public-key-file or public hex/bech-key string to use as the new calidus-key
+           --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stakepool
+           [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format, default: cborHex(text)
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+           [--out-cbor "<path_to_file>"]                        path to write a binary metadata.cbor file to
+   Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
+
+
+Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519 algorithm):
 
    Syntax: cardano-signer sign --cip100
    Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
-                                                                data or file in jsonld format to verify
+                                                                data or file in jsonld format to sign
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            --author-name "<name-of-signing-author>"             name of the signing author f.e. "John Doe"
            [--replace]                                          optional flag to replace the authors entry with the same public-key
@@ -106,7 +118,7 @@ Verify a hex/text-string or a binary-file via signature + publicKey:
 
    Syntax: cardano-signer verify
    Params: --data-hex "<hex>" | --data "<text>" | --data-file "<path_to_file>"
-                                                        data/payload/file to verify in hex-, text- or binary-file-format
+                                                                data/payload/file to verify in hex-, text- or binary-file-format
            --signature "<hex>|<bech>"                           signature in hex- or bech-format
            --public-key "<path_to_file>|<hex>|<bech>"           path to a public-key-file or a direct public hex/bech-key string
            [--address "<path_to_file>|<hex>|<bech>"]            optional address check against the public-key (address-file or a direct bech/hex format)
@@ -125,13 +137,24 @@ Verify a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
                                                                 optional data/payload/file if not present in the COSE_Sign1 signature
            [--address "<path_to_file>|<hex>|<bech>"]            optional signing-address to do the verification with
            [--nohashcheck]                                      optional flag to not perform a check that the public-key belongs to the address/hash
-           [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
+           [--include-maps]                                     optional flag to include the COSE maps in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 
-Verify Signatures in CIP-100 governance JSON-LD metadata:
+Verify CIP-88 Calidus-Pool-PublicKey registration-data:
+
+   Syntax: cardano-signer verify --cip88
+   Params: --data "<json-metadata>" |                           data to verify as json text
+           --data-file "<path_to_file>" |                       data to verify as json file
+           --data-hex "<hex>"                                   data to verify as cbor-hex-format
+           [--json | --json-extended]                           optional flag to generate output in json/json-extended format
+           [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
+   Output: "true/false" or JSON-Format
+
+
+Verify Signatures in CIP-100/108/119/136 governance JSON-LD metadata:
 
    Syntax: cardano-signer verify --cip100
    Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
@@ -145,7 +168,8 @@ Generate Cardano ed25519/ed25519-extended keys:
 
    Syntax: cardano-signer keygen
    Params: [--path "<derivationpath>"]                          optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"
-                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold, --path cc-hot, --path pool
+                                                                or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold,
+                                                                                     --path cc-hot, --path pool, --path calidus
            [--mnemonics "word1 word2 ... word24"]               optional mnemonic words to derive the key from (separate via space)
            [--passphrase "passphrase"]                          optional passphrase for --ledger or --trezor derivation method
            [--ledger | --trezor]                                optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet
@@ -168,6 +192,7 @@ Canonize&Hash the governance JSON-LD body metadata for author-signatures: (CIP-1
            [--out-canonized "<path_to_file>"]                   path to an output file for the canonized data
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "HASH of canonized body" or JSON-Format              NOTE: This is NOT the anchor-url-hash!!!
+
 ```
 
 <br>
