@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.24.3"
+const version = "1.25.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -14,14 +14,23 @@ const bip39 = require('bip39'); //used for mnemonics operations
 const crypto = require('crypto'); //used for crypto functions like entropy generation
 const jsonld = require('jsonld'); //used for canonizing json data (governance CIP-0100 metadata)
 
-//set the options for the command-line arguments. needed so that arguments like data-hex="001122" are not parsed as numbers
+//set the options for the command-line arguments, so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
-	string: ['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key', 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps'], //all booleans are set to false per default
+
+	string:	['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key',
+		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey',
+		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
+
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister',
+		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps'], //all booleans are set to false per default
+
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
-	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100', 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address', 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
+	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
+		 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address',
+		 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
+
 	unknown: function(unknownParameter) {
-			const numberParams = ['nonce', 'vote-weight', 'vote-purpose']; //these are parameter which specifies numbers, so they are not in the lists above, we only throw an error if the unknownParameter is not in this list
+			const numberParams = ['nonce', 'vote-weight', 'vote-purpose']; //these are parameters which defines numbers, so they are not in the lists above, we only throw an error if the unknownParameter is not in this list
 			if ( ! numberParams.includes(unknownParameter.substring(2).toLowerCase()) ) { //throw an error if given parameterName is not in any of the lists above
 				process.stderr.write(`Error: Unknown parameter '${unknownParameter}'`);
 				if ( ! unknownParameter.startsWith('--') ) { process.stderr.write(` - parameters must start with a double hypen like --secret-key`); }
@@ -29,26 +38,29 @@ const parse_options = {
 				process.exit(1);
 				}
 			}
+
 };
 const args = require('minimist')(process.argv.slice(3),parse_options); //slice(3) because we always have the workMode like 'keygen,sign,verify' at pos 2, so we start to look for arguments at pos 3
 
-//various constants
-const regExpHex = /^[0-9a-fA-F]+$/;
-const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;
+//regex for various matches
+const regExpHex = /^[0-9a-fA-F]+$/;		//matches a hex-string
+const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;	//matches a hex-string with an optional 0x at the beginning
 const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
-const regExpIntNumber = /^-?[0-9]+$/; //matches positive and optional negative integer numbers
+const regExpIntNumber = /^-?[0-9]+$/; 		//matches positive and optional negative integer numbers
 
 //catch all exceptions that are not catched via try
 process.on('uncaughtException', function (error) {
     console.error(`${error}`); process.exit(1);
 });
 
-function showUsage(topic, exit = true){
-//FontColors
-const Reset = "\x1b[0m"; const Bright = "\x1b[1m"; const Dim = "\x1b[2m"; const Underscore = "\x1b[4m"; const Blink = "\x1b[5m"; const Reverse = "\x1b[7m"; const Hidden = "\x1b[8m"
-const FgBlack = "\x1b[30m"; const FgRed = "\x1b[31m"; const FgGreen = "\x1b[32m"; const FgYellow = "\x1b[33m"; const FgBlue = "\x1b[34m"; const FgMagenta = "\x1b[35m"; const FgCyan = "\x1b[36m"; const FgWhite = "\x1b[37m"
 
-switch (topic) {
+function showUsage(topic, exit = true){
+
+   //FontColors
+   const Reset = "\x1b[0m"; const Bright = "\x1b[1m"; const Dim = "\x1b[2m"; const Underscore = "\x1b[4m"; const Blink = "\x1b[5m"; const Reverse = "\x1b[7m"; const Hidden = "\x1b[8m"
+   const FgBlack = "\x1b[30m"; const FgRed = "\x1b[31m"; const FgGreen = "\x1b[32m"; const FgYellow = "\x1b[33m"; const FgBlue = "\x1b[34m"; const FgMagenta = "\x1b[35m"; const FgCyan = "\x1b[36m"; const FgWhite = "\x1b[37m"
+
+   switch (topic) {
 
 	case 'sign':
 	        console.log(``)
@@ -81,6 +93,7 @@ switch (topic) {
 		console.log(`           [${FgGreen}--hashed${Reset}]						${Dim}optional flag to hash the payload given via the 'data' parameters${Reset}`);
 		console.log(`           [${FgGreen}--nopayload${Reset}]					${Dim}optional flag to exclude the payload from the COSE_Sign1 signature, default: included${Reset}`);
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
+		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"COSE_Sign1 + COSE_Key"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -110,7 +123,7 @@ switch (topic) {
 
 	case 'sign-cip88':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88 mode:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 mode:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip88${Reset}`);
 		console.log(`   Params: ${FgGreen}--calidus-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to use as the new calidus-key${Reset}`);
@@ -125,13 +138,14 @@ switch (topic) {
 
 	case 'sign-cip100':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519 algorithm):${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519/CIP-8 algorithm):${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
 		console.log(`								${Dim}data or file in jsonld format to sign${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 		console.log(`           ${FgGreen}--author-name${Reset} "<name-of-signing-author>"		${Dim}name of the signing author f.e. "John Doe"${Reset}`);
+		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional path to an address/id-file or a direct bech/hex format 'stake1..., addr1..., drep1...' to sign with CIP-8 algorithm${Reset}`);
 		console.log(`           [${FgGreen}--replace${Reset}]						${Dim}optional flag to replace the authors entry with the same public-key${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"Signed JSON-LD Content"${Reset} or ${FgCyan}"JSON-HashInfo if --out-file is used"${Reset}`);
@@ -176,12 +190,13 @@ switch (topic) {
 
 	case 'verify-cip88':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Verify CIP-88 Calidus-Pool-PublicKey registration-data:${Reset}`)
+	        console.log(`${Bright}${Underscore}Verify CIP-88v2 Calidus-Pool-PublicKey registration-data:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip88${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<json-metadata>" |				${Dim}data to verify as json text${Reset}`);
 		console.log(`           ${FgGreen}--data-file${Reset} "<path_to_file>" |			${Dim}data to verify as json file${Reset}`);
 		console.log(`           ${FgGreen}--data-hex${Reset} "<hex>"					${Dim}data to verify as cbor-hex-format${Reset}`);
+		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"true/false"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -259,13 +274,12 @@ switch (topic) {
 		console.log(`   ${Dim}https://github.com/gitmachtl (Cardano SPO Scripts \/\/ ATADA Stakepools Austria)${Reset}`)
 		console.log(``)
 
-
-} //switch
-if ( exit ) { process.exit(1); }
+   } //switch topic
+   if ( exit ) { process.exit(1); }
 }
 
 
-//function to count the words in a string
+//function to count the number of words in a string
 function wordCount(s) {
         return s.split(' ')
                 .filter(function(n) { return n != '' })
@@ -274,7 +288,7 @@ function wordCount(s) {
 
 //trimString function to cut of leading or trailing white-spaces and newline chars
 function trimString(s){
-        s = s.replace(/(^\s*)|(\s*$)/gi,"");    //exclude start and end white-space
+        s = s.replace(/(^\s*)|(\s*$)/gi,"");    // exclude start and end white-space
         s = s.replace(/\n /,"\n");              // exclude newline with a start spacing
         return s;
 }
@@ -282,7 +296,7 @@ function trimString(s){
 //Special trimString variant to also reduce spaces between words
 function trimMnemonic(s){
         s = s.replace(/(^\s*)|(\s*$)/gi,"");    // exclude start and end white-space
-        s = s.replace(/[ ]{2,}/gi," ");         // 2 or more space between words to 1
+        s = s.replace(/[ ]{2,}/gi," ");         // reduce 2 or more space between words to 1
         s = s.replace(/\n /,"\n");              // exclude newline with a start spacing
         return s;
 }
@@ -524,6 +538,7 @@ function generateIcarusMasterKey(entropy, passphrase) {
         return xprv;
 }
 
+
 function generateLedgerMasterKey(mnemonic, passphrase) {
         const masterSeed = crypto.pbkdf2Sync(mnemonic,"mnemonic" + passphrase,2048,64,'sha512')
         const message = new Uint8Array([1, ...masterSeed])  // mirror Adrestia's code bug "1"+seed
@@ -538,6 +553,7 @@ function generateLedgerMasterKey(mnemonic, passphrase) {
         return xprv;
 }
 
+
 function hmacRecursive(message) {
         var hmac = crypto.createHmac('sha512',"ed25519 seed")
                 .update(message)
@@ -549,6 +565,7 @@ function hmacRecursive(message) {
         return hmac;
 }
 
+
 function leftPad(str, padString, length) {
         while (str.length < length) {
                 str = padString + str;
@@ -556,13 +573,16 @@ function leftPad(str, padString, length) {
         return str;
 }
 
+
 function binaryToByte(bin) {
         return parseInt(bin, 2);
 }
 
+
 function bytesToBinary(bytes) {
         return bytes.map((x) => leftPad(x.toString(2), '0', 8)).join('');
 }
+
 
 function deriveChecksumBits(entropyBuffer) {
         const ENT = entropyBuffer.length * 8;
@@ -572,6 +592,7 @@ function deriveChecksumBits(entropyBuffer) {
                 .digest();
         return bytesToBinary(Array.from(hash)).slice(0, CS);
 }
+
 
 // function to convert a json object (JSON.parse) into a Map, this also converts hex-strings into bytearrays/buffers
 const jsToMap = (obj) => {
@@ -600,6 +621,8 @@ const jsToMap = (obj) => {
     }
 }
 
+
+// function to convert a Map into JSON
 const mapToJs = (obj) => {
 	return JSON.stringify(obj, function (key, value) {
 		if (value instanceof Map) { return Object.fromEntries(value) }
@@ -609,6 +632,7 @@ const mapToJs = (obj) => {
 		return value
   })
 }
+
 
 // VERIFY CIP8/30 FUNCTION -> coded as a function so it can be reused within other functions
 function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(3)) { //default calling arguments are the same as calling the main process - can be modified by subfunctions
@@ -661,10 +685,10 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 
 			//do a sanity check on the decoded COSE_Key_structure
 			if ( ! COSE_Key_structure instanceof Map || COSE_Key_structure.size < 4 ) { throw {'msg': `COSE_Key is not valid. It must be a map with at least 4 entries: kty,alg,crv,x.`}; }
-			else if ( COSE_Key_structure.get(1) != 1 ) { throw {'msg': `COSE_Key map label '1' (kty) is not '1' (OKP)`}; }
-			else if ( COSE_Key_structure.get(3) != -8 ) { throw {'msg': `COSE_Key map label '3' (alg) is not '-8' (EdDSA)`}; }
-			else if ( COSE_Key_structure.get(-1) != 6 ) { throw {'msg': `COSE_Key map label '-1' (crv) is not '6' (Ed25519)`}; }
-			else if ( ! COSE_Key_structure.has(-2) ) { throw {'msg': `COSE_Key map label '-2' (public key) is missing`}; }
+			else if ( COSE_Key_structure.get(1) != 1 ) { throw {'msg': `COSE_Key map key '1' (kty) is not '1' (OKP)`}; }
+			else if ( COSE_Key_structure.get(3) != -8 ) { throw {'msg': `COSE_Key map key '3' (alg) is not '-8' (EdDSA)`}; }
+			else if ( COSE_Key_structure.get(-1) != 6 ) { throw {'msg': `COSE_Key map key '-1' (crv) is not '6' (Ed25519)`}; }
+			else if ( ! COSE_Key_structure.has(-2) ) { throw {'msg': `COSE_Key map key '-2' (public key) is missing`}; }
 
 			//get the publickey
 			var pubKey_buffer =  COSE_Key_structure.get(-2);
@@ -695,24 +719,28 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 			//extract the content: protectedHeader, unprotectedHeader, payload, signature
 			//
 			// 1) protectedHeader
+			// alg (1) - must be set to EdDSA (-8)
+			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
+			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
 
 				var protectedHeader_buffer = COSE_Sign1_structure[0];
 				if ( ! Buffer.isBuffer(protectedHeader_buffer) ) { throw {'msg': `Protected header is not a bytearray (serialized) cbor`}; }
-				//cbor decode the protectedHeader_cbor_hex into protectedHeader
+				//cbor decode the protectedHeader_buffe into protectedHeader Map
 				try {
 					var protectedHeader = cbor.decode(protectedHeader_buffer)
 				} catch (error) { throw {'msg': `Can't cbor decode the protected header (${error})`}; }
 
 				//extract the content and do a check on the map entries
-				if ( ! protectedHeader.has(1) ) { throw {'msg': `Protected header map label '1' is missing`}; }
-				else if ( protectedHeader.get(1) != -8 ) { throw {'msg': `Protected header map label '1' (alg) is not '-8' (EdDSA)`}; }
-				else if ( ! protectedHeader.has('address') ) { throw {'msg': `Protected header map label 'address' is missing`}; }
+				if ( ! protectedHeader.has(1) ) { throw {'msg': `Protected header map key '1' is missing`}; }
+				else if ( protectedHeader.get(1) != -8 ) { throw {'msg': `Protected header map key '1' (alg) is not '-8' (EdDSA)`}; }
+				else if ( ! protectedHeader.has('address') ) { throw {'msg': `Protected header map key 'address' is missing`}; }
 				var sign_addr_buffer = protectedHeader.get('address');
-				if ( ! Buffer.isBuffer(sign_addr_buffer) ) { throw {'msg': `Protected header map label 'address' invalid`}; }
+				if ( ! Buffer.isBuffer(sign_addr_buffer) ) { throw {'msg': `Protected header map value of key 'address' is not a bytearray`}; }
 
 				//if there is an optional address parameter present, use it instead of the one from the COSE_Sign1 signature
 	                        var address = sub_args['address'];
 	                        if ( typeof address === 'string' ) { //do the check if the parameter is provided
+
 					//read the address from a file or direct hex/bech
 				        sign_addr = readAddr2hex(address, pubKey);
 		                        //check that the given address belongs to the pubKey
@@ -723,6 +751,10 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 					protectedHeader.set('address',Buffer.from(sign_addr.hex,'hex'));
 					//check if the optional kid (map4) "key-identifier" was also supplied in the protectedHeader. if so, also replace that entry
 					if ( protectedHeader.has(4) ) { protectedHeader.set(4,Buffer.from(sign_addr.hex,'hex')); }
+
+					//convert the modified protectedHeader Map back into cbor hex
+					var protectedHeader_cbor_hex = cbor.encode(protectedHeader).toString('hex')
+
 				} else {
 					//read the sign_addr from the protectedHeader
 				        sign_addr = readAddr2hex(sign_addr_buffer.toString('hex'), pubKey);
@@ -730,7 +762,12 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 		                        if ( ( sub_args['nohashcheck'] === false ) && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
 		                                throw {'msg': `The ${sign_addr.type} address '${sign_addr.addr}' in the COSE_Sign1 does not belong to the public key in the COSE_Key.`};
 					}
+
+					//no modifications to the protected header, reuse the existing buffer
+					var protectedHeader_cbor_hex = Buffer.from(protectedHeader_buffer).toString('hex')
+
 				}
+
 
 			// 2) unprotectedHeader -> get the value for the isHashed boolean
 
@@ -744,9 +781,9 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 					throw {'msg': `Unprotected header is not a map`};
 				}
 
-				if ( ! unprotectedHeader.has('hashed') ) { throw {'msg': `Unprotected header label 'hashed' is missing`}; }
+				if ( ! unprotectedHeader.has('hashed') ) { throw {'msg': `Unprotected header key 'hashed' is missing`}; }
 				var isHashed = unprotectedHeader.get('hashed');
-				if ( typeof isHashed !== 'boolean' ) { throw {'msg': `Unprotected header label 'hashed' is not a boolean`}; }
+				if ( typeof isHashed !== 'boolean' ) { throw {'msg': `Unprotected header value in key 'hashed' is not a boolean`}; }
 
 				//if there is already a payload_data_hex present via the optional data parameters, hash it if needed to match the settings in the COSE_Sign1 signature
 				if ( payload_data_hex && isHashed ) { payload_data_hex = getHash(payload_data_hex, 28); } //hash the payload with blake2b_224 (28bytes digest length) }
@@ -774,13 +811,6 @@ function verifyCIP8(workMode = "verify-cip8", calling_args = process.argv.slice(
 				var ed25519signature = CardanoWasm.Ed25519Signature.from_hex(signature_hex);
 				} catch (error) { throw {'msg': `${error}`}; }
 
-			//generate the protectedHeader with the current values (the address within it might have been overwritten by a given one)
-			// alg (1) - must be set to EdDSA (-8)
-			// kid (4) - Optional, if present must be set to the same value as in the COSE_Key specified below. It is recommended to be set to the same value as in the "address" header.
-			// "address" - must be set to the raw binary bytes of the address as per the binary spec, without the CBOR binary wrapper tag
-//			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
-//			var protectedHeader_cbor_hex = Buffer.from(cbor.encode(new Map().set(1,-8).set(4,Buffer.from(sign_addr.hex,'hex')).set('address',Buffer.from(sign_addr.hex,'hex')))).toString('hex')
-			var protectedHeader_cbor_hex = cbor.encode(protectedHeader).toString('hex')
 
 			//generate the data to verify, as a serialized cbor of the Sig_structure
 			//Sig_structure = [
@@ -839,7 +869,7 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 			try {
 			if ( sign_key.length <= 64 ) { var prvKey = CardanoWasm.PrivateKey.from_normal_bytes(Buffer.from(sign_key, "hex")); }
 						else { var prvKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(sign_key.substring(0,128), "hex")); } //use only the first 64 bytes (128 chars)
-			} catch (error) { throw {'msg': `${error}`}; }
+			} catch (error) { throw {'msg': `Could not load the signing/secret key - ${error}`}; }
 
 			//generate the public key from the secret key for external verification
 			var pubKey = Buffer.from(prvKey.to_public().as_bytes()).toString('hex')
@@ -971,7 +1001,10 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"signDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
 				content += `"signature": "${signature_hex}",`;
 				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `
-				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" } }`;
+				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" }`;
+				if ( sub_args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
+					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)}, "protectedHeader": ${mapToJs(cbor.decode(protectedHeader_cbor_hex))} }` }
+				content += ` }`
 
 			} else { //generate content in text format
 				var content = COSE_Sign1_cbor_hex + " " + COSE_Key_cbor_hex;
@@ -1004,35 +1037,14 @@ async function main() {
         //show version
         if ( process.argv[2].toLowerCase().includes('version') ) { console.log(`${appname} ${version}`); process.exit(0); }
 
-        //first parameter - workMode: "sign or verify"
+        //first parameter - workMode: "sign, verify or keygen"
         var workMode = process.argv[2];
         if ( ! workMode ) { showUsage(); }
         workMode = trimString(workMode.toLowerCase());
 
-	//CIP8-Flag-Check
-        if ( args['cip8'] === true ) {workMode = workMode + '-cip8'}
-
-	//CIP30-Flag-Check
-        if ( args['cip30'] === true ) {workMode = workMode + '-cip30'}
-
-	//CIP36-Flag-Check
-        if ( args['cip36'] === true ) {
-		workMode = workMode + '-cip36'
-		//add deregister in CIP36 mode if the flag was set
-		if ( args['deregister'] === true ) { workMode = workMode + "-deregister" }
-	}
-
-	//CIP88-Flag-Check
-        if ( args['cip88'] === true ) {workMode = workMode + '-cip88'}
-
-	//CIP100-Flag-Check
-        if ( args['cip100'] === true ) {workMode = workMode + '-cip100'}
-
-	//LEDGER-Flag-Check
-        if ( args['ledger'] === true ) {workMode = workMode + '-ledger'}
-
-	//TREZOR-Flag-Check
-        if ( args['trezor'] === true ) {workMode = workMode + '-trezor'}
+	//check additional flags and add it to the workMode var
+	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor' ];
+	workmodeFlags.forEach( element => { args[element] ? workMode += `-${element}` : {} } );
 
 	//show usage for the workMode
 	if ( args['help'] === true ) { showUsage(workMode); }
@@ -1041,7 +1053,7 @@ async function main() {
         switch (workMode) {
 
 
-                case "sign":  //SIGN DATA IN DEFAULT MODE
+		case "sign":  //SIGN DATA IN DEFAULT MODE
 
 			//get data-hex to sign -> store it in sign_data_hex
 			var sign_data_hex = args['data-hex'];
@@ -1512,7 +1524,7 @@ async function main() {
 					  '--data-hex', payloadCborHash,
 					  '--secret-key', prvKeyHex,
 					  '--address', poolIdHex ] );
-			} catch (error) { console.error(`Error: CIP-8 signing error ${error.msg}`); process.exit(1); }
+			} catch (error) { console.error(`Error: CIP-8 signing error - ${error.msg}`); process.exit(1); }
 
 			//convert the cose_sign1 into a standard map
 			var coseSign1Map = cbor.decode(ret.cose_sign1_cbor_hex);
@@ -1717,7 +1729,7 @@ async function main() {
 			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
-			var rootKeyHex = '';
+			var rootKeyHex = '', calidusIdHex = '';
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -2024,20 +2036,22 @@ async function main() {
 
 				case '1853H/1815H': //pool keys
 
+					//generate the secret key json and bech format
 					var skeyContent = `{ "type": "StakePoolExtendedSigningKey_ed25519_bip32", "description": "Stake Pool Operator Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var prvKeyBech = bech32.encode("pool_xsk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
+
+					//generate the public key json and bech format
 					if ( args['vkey-extended'] === true ) {
 						var vkeyContent = `{ "type": "StakePoolExtendedVerificationKey_ed25519_bip32", "description": "Stake Pool Operator Verification Key", "cborHex": "${pubKeyCbor}" }`;
+						var pubKeyBech = bech32.encode("pool_xvk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 					} else {
 						var vkeyContent = `{ "type": "StakePoolVerificationKey_ed25519", "description": "Stake Pool Operator Verification Key", "cborHex": "${pubKeyCbor}" }`;
+						var pubKeyBech = bech32.encode("pool_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 					}
 
 					//also generate the pool id in hex and bech format
 					var poolIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 					var poolIdBech = bech32.encode("pool", bech32.toWords(Buffer.from(poolIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
-
-					//generate the keys also in bech format
-					var prvKeyBech = bech32.encode("pool_sk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
-					var pubKeyBech = bech32.encode("pool_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 					break;
 
 
@@ -2358,6 +2372,7 @@ async function main() {
 			//load default variable
 			var authors_array = [] //holds the authors for the output with there name and verified field
 			var all_authors_publickey_array = [] //holds a list of all publickeys of the authors
+			var authorSigningMode = "ed25519" //default signing mode
 
 			//get signing key -> store it in sign_key
 			var key_file_hex = args['secret-key'];
@@ -2378,6 +2393,10 @@ async function main() {
 			//get author name -> store it in add_author_name
 			var add_author_name = args['author-name'];
 		        if ( typeof add_author_name === 'undefined' || add_author_name === true || add_author_name == '' ) { console.error(`Error: Missing author name parameter`); showUsage(workMode); }
+
+			//get an optional signing address/id. if present, use CIP-0008 signing mode instead of the default ed25519 mode
+			var address = args['address'];
+		        if ( typeof address !== 'undefined' && address !== true ) { authorSigningMode = "CIP-0008"; }
 
 			//FIRST, we verify the input JSONLD File
 
@@ -2416,11 +2435,34 @@ async function main() {
 					if (jsonld_input["hashAlgorithm"] != 'blake2b-256') { console.error(`Error: unknown or missing hashAlgorithm - ${jsonld_input["hashAlgorithm"]}`); process.exit(1); }
 					var canonized_hash = getHash(Buffer.from(canonized_data).toString('hex'));
 
-					//sign the data
-					try {
-						var signedBytes = prvKey.sign(Buffer.from(canonized_hash, 'hex')).to_bytes();
-						var signature = Buffer.from(signedBytes).toString('hex');
-					} catch (error) { console.error(`Error: ${error}`); process.exit(1); }
+					//sign the data according to the choosen signing mode
+					switch (authorSigningMode) {
+
+						case 'ed25519': //sign with standard ed25519 algorithm
+
+							try {
+								var signedBytes = prvKey.sign(Buffer.from(canonized_hash, 'hex')).to_bytes();
+								var signature = Buffer.from(signedBytes).toString('hex');
+							} catch (error) { console.error(`Error: ed25519 signing error - ${error}`); process.exit(1); }
+							break;
+
+						case 'CIP-0008': //sign with CIP-0008 algorithm, the given address/id must belong to the signing key
+
+							try {
+								var ret = signCIP8('sign-cip8',
+									[ '--cip8',
+									  '--data-hex', canonized_hash,
+									  '--secret-key', sign_key,
+									  '--address', address ] );
+								var signature = ret.cose_sign1_cbor_hex;
+							} catch (error) { console.error(`Error: CIP-8 signing error - ${error.msg}`); process.exit(1); }
+							break;
+
+						default: //no supported signingMode found or its missing
+							console.error(`Error: authorSigningMode '${authorSigningMode}' is unsupported, you should not have landed here`); process.exit(1);
+							break;
+
+					} //switch authorSigningMode
 
 					//OK, at this point we have canonized and hash the @context&body content, also we have checked that the hashAlgorithm is correct
 					//now lets check the authors field. if present, load it and check signatures that may be already present, if we detect a wrong one, exit with an error
@@ -2505,7 +2547,7 @@ async function main() {
 					}
 
 					//we are finished with the authors verification, also we have already signed the canonized_hash
-					var authorArrayEntry = { "name" : add_author_name, "witness": { "witnessAlgorithm": "ed25519", "publicKey" : pubKey, "signature" : signature } };
+					var authorArrayEntry = { "name" : add_author_name, "witness": { "witnessAlgorithm": authorSigningMode, "publicKey" : pubKey, "signature" : signature } };
 					authors_array.push(authorArrayEntry);
 
 					//set the authors field in the JSONLD content
@@ -2523,7 +2565,7 @@ async function main() {
 						fs.writeFileSync(out_file, content, 'utf8')
 						// file written successfully
 						var anchorHash = getHash(Buffer.from(Buffer.from(content).toString('utf8'))); // use the content also in utf-8 format like the written output
-						console.log(`{ "workMode": "${workMode}", "outFile": "${out_file}", "anchorHash": "${anchorHash}" }`);
+						console.log(`{ "workMode": "${workMode}", "witnessAlgorithm": "${authorSigningMode}", "outFile": "${out_file}", "anchorHash": "${anchorHash}" }`);
 						} catch (error) { console.error(`${error}`); process.exit(1); }
 					}
 
@@ -2575,7 +2617,7 @@ async function main() {
 			//we have the data to verify loaded into dataMap now, this is a Map object
 
 			//do a rough sanity check on the key map entries
-			if ( ! dataMap.has(867) || dataMap.get(867).size < 3 ) { console.error(`Error: Data to verify has no map label 867 or not enough entries`); process.exit(1); }
+			if ( ! dataMap.has(867) || dataMap.get(867).size < 3 ) { console.error(`Error: Data to verify has no map key 867 or not enough entries`); process.exit(1); }
 			else if ( isNaN(dataMap.get(867).get(0)) || dataMap.get(867).get(0) < 2 ) { console.error(`Error: Map key 0 (version) is not set to 2 or above`); process.exit(1); }
 			else if ( ! dataMap.get(867).has(1) || dataMap.get(867).get(1).size < 5 ) { console.error(`Error: Map key 1 (payload) is missing or does not have at least 5 entries`); process.exit(1); }
 			else if ( ! dataMap.get(867).has(2) || ! dataMap.get(867).get(2) instanceof Array || dataMap.get(867).get(2).length != 1 ) { console.error(`Error: Map key 2 (witness) is missing or is not an array with a single entry (only one witness supported currently)`); process.exit(1); }
@@ -2668,7 +2710,10 @@ async function main() {
 				var content = `{ "workMode": "${workMode}", "result": "${ret.verified}", "poolIdHex": "${scopePoolIdHex}", "poolIdBech": "${poolIdBech}", `;
 				content += `"calidusPublicKey": "${calidusPubKeyHex}", "calidusIdHex": "${calidusIdHex}", "calidusIdBech": "${calidusIdBech}", "publicKey": "${pubKeyHex}", `;
 				content += `"nonce": ${payloadMap.get(4)}, "payloadCbor": "${payloadCborHex}", "payloadHash": "${payloadCborHash}", "isHashed": "${json_ret['isHashed']}", "verifyDataHex": "${verifyDataHex}", `;
-				content += `"coseSign1Hex": "${coseSign1Hex}", "coseKeyHex": "${coseKeyHex}", "coseSignature": "${json_ret['signature']}" }`;
+				content += `"coseSign1Hex": "${coseSign1Hex}", "coseKeyHex": "${coseKeyHex}", "coseSignature": "${json_ret['signature']}"`;
+				if ( args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
+					content += `, "maps": { "COSE_Key": ${mapToJs(coseKeyMap)}, "COSE_Sign1": ${mapToJs(coseSign1Map)}, "payloadData": ${mapToJs(payloadMap)} }` }
+				content += ` }`;
 
 			} else { //generate content in text format
 				var content = `${json_ret['result']}`;

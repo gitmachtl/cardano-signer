@@ -1,5 +1,33 @@
 ## Release Notes / Change-Logs
 
+* **1.25.0**
+
+  #### CIP8/30 Updates
+
+  - The CIP8/30 verification function got a bit of a code clean up, reencoding the `protected_header` into cbor hex only if needed.
+  - Using the `sign --cip8/30` function now also has the `--include-maps` flag option. If set, the `--json-extended` output contains the COSE maps too. This was available for `verify --cip8/30` before.
+
+  #### CIP88v2/151 Calidus Updates
+
+  - Using the `verify --cip88` function now also has the `--include-maps` flag option. If set, the `--json-extended` output contains the COSE maps too.
+
+  #### CIP100 Author-Signing
+
+  - Its now possible to sign in `CIP-8` mode if the optional `--address xxx` parameter is used:
+    `cardano-signer sign --cip100 --data-file myUnsigned.json --secret-key xxx.skey --author-name "Its me!" --address xxx --out-file mySigned.json`
+  
+  #### Key-Generation
+  
+  - Generating pool-keys via a set path `--path pool` or `--path 1853H/1815H/0H/0H` now also includes the extended bech keys in the `--json-extended` output:
+    `"secretKeyBech": "pool_xsk1fzvvmh...", "publicKeyBech": "pool_vk1wc8mjku..."`
+  - The `calidusIdHex` and `calidusIdBech` output is now only showing up if you generate calidus keys.
+  
+
+  #### General Updates
+  
+  - Code clean-up like optional start flags are now read from an array. Improved error messages. etc.
+
+
 * **1.24.3**
 
   #### CIP-100 Author-Signing
