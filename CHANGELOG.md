@@ -1,5 +1,19 @@
 ## Release Notes / Change-Logs
 
+
+* **1.26.0**
+
+  #### Key-Generation
+
+  - Two new output options were added to the `keygen` function:
+    - `--out-id <filename>` writes out the generated pool/cc-hot/cc-cold/calidus or drep-id to a file.
+    - `--out-mnemonics <filename>` writes out the used mnemonic words to a file for later usage.
+
+  #### Breaking changes
+
+  - The secret/signing key is no longer automatically exported using the `--json-extended` output format in all function except the `keygen` function. This was removed to enhance security. If you wanna have the secret key included like before, you can do so by adding the new flag `--include-secret`.
+
+
 * **1.25.0**
 
   #### CIP8/30 Updates

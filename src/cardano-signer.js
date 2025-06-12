@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.25.0"
+const version = "1.26.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -18,11 +18,11 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 const parse_options = {
 
 	string:	['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key',
-		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey',
+		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics',
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
 
 	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister',
-		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps'], //all booleans are set to false per default
+		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps', 'include-secret'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
@@ -71,6 +71,7 @@ function showUsage(topic, exit = true){
 		console.log(`								${Dim}data/payload/file to sign in hex-, text- or binary-file-format${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional address check against the signing-key (address-file or a direct bech/hex format)${Reset}`);
+		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--jcli${Reset} |${FgGreen} --bech${Reset}]					${Dim}optional flag to generate signature & publicKey in jcli compatible bech-format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -94,6 +95,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--nopayload${Reset}]					${Dim}optional flag to exclude the payload from the COSE_Sign1 signature, default: included${Reset}`);
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
+		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"COSE_Sign1 + COSE_Key"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -114,6 +116,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
 		console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--payment-address needed${Reset}`);
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
+		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex(text)${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 		console.log(`           [${FgGreen}--out-cbor${Reset} "<path_to_file>"]			${Dim}path to write a binary metadata.cbor file to${Reset}`);
@@ -129,6 +132,7 @@ function showUsage(topic, exit = true){
 		console.log(`   Params: ${FgGreen}--calidus-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to use as the new calidus-key${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stakepool${Reset}`);
 		console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
+		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex(text)${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 		console.log(`           [${FgGreen}--out-cbor${Reset} "<path_to_file>"]			${Dim}path to write a binary metadata.cbor file to${Reset}`);
@@ -235,8 +239,10 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--vkey-extended${Reset}] 					${Dim}optional flag to generate a 64byte publicKey with chain code${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
-		console.log(`           [${FgGreen}--out-skey${Reset} "<path_to_skey_file>"]			${Dim}path to an output skey-file${Reset}`);
-		console.log(`           [${FgGreen}--out-vkey${Reset} "<path_to_vkey_file>"]			${Dim}path to an output vkey-file${Reset}`);
+		console.log(`           [${FgGreen}--out-skey${Reset} "<path_to_skey_file>"]			${Dim}path to an output skey-file (writes out a typical *.skey json)${Reset}`);
+		console.log(`           [${FgGreen}--out-vkey${Reset} "<path_to_vkey_file>"]			${Dim}path to an output vkey-file (writes out a typical *.vkey json)${Reset}`);
+		console.log(`           [${FgGreen}--out-id${Reset} "<path_to_id_file>"]			${Dim}path to an output id-file (writes out the bech-id of a pool, drep, calidus,...)${Reset}`);
+		console.log(`           [${FgGreen}--out-mnemonics${Reset} "<path_to_id_file>"]		${Dim}path to an output mnemonics-file (writes out the used mnemonics into a file)${Reset}`);
 	        console.log(`   Output: ${FgCyan}"secretKey + publicKey"${Reset} or ${FgCyan}JSON-Format${Reset}		${Dim}default: hex-format${Reset}`);
 	        console.log(``)
 		break;
@@ -255,7 +261,6 @@ function showUsage(topic, exit = true){
 	        console.log(`   Output: ${FgCyan}"HASH of canonized body"${Reset} or ${FgCyan}JSON-Format${Reset}		${FgRed}NOTE: This is NOT the anchor-url-hash!!!${Reset}`);
 	        console.log(``)
 		break;
-
 
 	default:
 		showUsage('sign',false);
@@ -325,7 +330,6 @@ function readKey2hex(key,type,jsonSearchArray) { //reads a standard-cardano-skey
 			// try to use the parameter as a filename for a cardano skey json with a cborHex entry
 			try {
 				const key_json = JSON.parse(fs.readFileSync(key,'utf8')); //parse the given key as a json file
-//				const is_signing_key = key_json.type.toLowerCase().includes('signing') //boolean if the json contains the keyword 'signing' in the type field
 				const is_signing_key = jsonSearchArray.some( element => key_json.type.toLowerCase().includes(element.toLowerCase()) ); //boolean if the json contains one of the keywords in the jsonSearchArray
 				if ( ! is_signing_key ) { console.error(`Error: The file '${key}' is not a secret key json of type '${jsonSearchArray}'. Instead it is of type '` + key_json.type + `'`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
@@ -365,7 +369,6 @@ function readKey2hex(key,type,jsonSearchArray) { //reads a standard-cardano-skey
 			// try to use the parameter as a filename for a cardano vkey json with a cborHex entry
 			try {
 				const key_json = JSON.parse(fs.readFileSync(key,'utf8')); //parse the given key as a json file
-//				const is_verification_key = key_json.type.toLowerCase().includes('verification') //boolean if the json contains the keyword 'verification' in the type field
 				const is_verification_key = jsonSearchArray.some( element => key_json.type.toLowerCase().includes(element.toLowerCase()) ); //boolean if the json contains one of the keywords in the jsonSearchArray
 				if ( ! is_verification_key ) { console.error(`Error: The file '${key}' is not a public key json of type '${jsonSearchArray}'. Instead it is of type '` + key_json.type + `'`); process.exit(1); }
 				key_hex = key_json.cborHex.substring(4).toLowerCase(); //cut off the leading "5820/5840" from the cborHex
@@ -999,8 +1002,9 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 				content += `"isHashed": "${isHashed}",`;
 				if ( isHashed ) { content += `"hashedInputDataHex": "${payload_data_hex}", `; } //only include the payload_data_hex(now in hashed format) if isHashed is true
 				if ( Sig_structure_cbor_hex.length <= 2000000 ) { content += `"signDataHex": "${Sig_structure_cbor_hex}", `; } //only include the Sig_structure_cbor_hex if it is less than 2M of chars
-				content += `"signature": "${signature_hex}",`;
-				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `
+				content += `"signature": "${signature_hex}", "publicKey": "${pubKey}",`;
+				if ( sub_args['include-secret'] === true ) { //generate content also with the secret key
+					content += `"secretKey": "${prvKeyHex}", `; }
 				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" }`;
 				if ( sub_args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
 					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)}, "protectedHeader": ${mapToJs(cbor.decode(protectedHeader_cbor_hex))} }` }
@@ -1134,7 +1138,10 @@ async function main() {
 				var content = `{ "workMode": "${workMode}", `;
 				if ( sign_data_hex.length <= 2000000 ) { content += `"signDataHex": "${sign_data_hex}", `; } //only include the sign_data_hex if it is less than 2M of chars
 				if ( sign_addr ) { content += `"addressHex": "${sign_addr.hex}", "addressType": "${sign_addr.type}", "addressNetwork": "${sign_addr.network}", `; } //only include the signing address if provided
-				content += `"signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}" }`;
+				content += `"signature": "${signature}", "publicKey": "${pubKey}"`;
+				if ( args['include-secret'] === true ) { //generate content also with the secret key
+					content += `, "secretKey": "${prvKeyHex}"`; }
+				content += ` }`;
 			} else { //generate content in text format
 				var content = signature + " " + pubKey;
 			}
@@ -1325,7 +1332,11 @@ async function main() {
 				var content = `{ "61284": { "1": [ ${delegations} ], "2": "0x${pubKey}", "3": "0x${rewards_addr.hex}", "4": ${nonce}, "5": ${vote_purpose} }, "61285": { "1": "0x${signature}" } }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
-				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description} (${vote_purpose})", "totalVoteWeight": ${total_vote_weight}, "paymentAddressHex": "${rewards_addr.hex}", "paymentAddressType": "${rewards_addr.type}", "paymentAddressNetwork": "${rewards_addr.network}", "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `;
+				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description} (${vote_purpose})", "totalVoteWeight": ${total_vote_weight},`;
+				content += `"paymentAddressHex": "${rewards_addr.hex}", "paymentAddressType": "${rewards_addr.type}", "paymentAddressNetwork": "${rewards_addr.network}",`;
+				content += `"signDataHex": "${sign_data_hex}", "signature": "${signature}", "publicKey": "${pubKey}", `;
+				if ( args['include-secret'] === true ) { //generate content also with the secret key
+					content += `"secretKey": "${prvKeyHex}", `; }
 				var delegations = [];
 				for (let cnt = 0; cnt < all_vote_keys_array.length; cnt++) {
 				delegations.push(`[ "0x${all_vote_keys_array[cnt]}", ${all_weights_array[cnt]} ]`)
@@ -1433,7 +1444,10 @@ async function main() {
 				var content = `{ "61286": { "1": "0x${pubKey}", "2": ${nonce}, "3": ${vote_purpose} }, "61285": { "1": "0x${signature}" } }`;
 			} else if ( args['json-extended'] === true ) { //generate content in json format with additional fields
 				var prvKeyHex = Buffer.from(prvKey.as_bytes()).toString('hex');
-				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description}", "signDataHex": "${sign_data_hex}", "signature": "${signature}", "secretKey": "${prvKeyHex}", "publicKey": "${pubKey}", `;
+				var content = `{ "workMode": "${workMode}", "votePurpose": "${vote_purpose_description}",`;
+				content += `"signDataHex": "${sign_data_hex}", "signature": "${signature}", "publicKey": "${pubKey}", `;
+				if ( args['include-secret'] === true ) { //generate content also with the secret key
+					content += `"secretKey": "${prvKeyHex}", `; }
 				content += `"output": { "cbor": "${deregistrationCBOR}", "json": { "61286": { "1": "0x${pubKey}", "2": ${nonce}, "3": ${vote_purpose} }, "61285": { "1": "0x${signature}" } } } }`;
 			} else { //generate content in text format
 				var content = `${deregistrationCBOR}`;
@@ -1554,7 +1568,9 @@ async function main() {
 
 				var content = `{ "workMode": "${workMode}", "poolIdHex": "${poolIdHex}", "poolIdBech": "${poolIdBech}",`;
 				content += `"calidusPublicKey": "${calidusPubKeyHex}", "calidusIdHex": "${calidusIdHex}", "calidusIdBech": "${calidusIdBech}",`;
-				content += `"secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}", "nonce": ${nonce}, "payloadCbor": "${payloadCborHex}",`;
+				if ( args['include-secret'] === true ) { //generate content also with the secret key
+					content += `"secretKey": "${prvKeyHex}", `; }
+				content += `"publicKey": "${pubKeyHex}", "nonce": ${nonce}, "payloadCbor": "${payloadCborHex}",`;
 				content += `"payloadHash": "${payloadCborHash}", "coseSign1Hex": "${ret.cose_sign1_cbor_hex}", "coseKeyHex": "${ret.cose_key_cbor_hex}",`;
 				content += `"output": { "cbor": "${registrationCborHex}", "json": ${mapToJs(registrationMap)} } }`;
 
@@ -1729,7 +1745,8 @@ async function main() {
 			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
-			var rootKeyHex = '', calidusIdHex = '';
+			var rootKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
+
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1951,6 +1968,7 @@ async function main() {
 							//also generate the drep id in hex and bech format
 							var drepIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 							var drepIdBech = bech32.encode("drep", bech32.toWords(Buffer.from(drepIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+							var outIdBech = drepIdBech; //option to write out the generated id to a file
 
 							//generate the public key formats
 							if ( args['vkey-extended'] === true ) {
@@ -1973,6 +1991,7 @@ async function main() {
 							//also generate the cc id in hex and bech format
 							var ccColdIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 							var ccColdIdBech = bech32.encode("cc_cold", bech32.toWords(Buffer.from(ccColdIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+							var outIdBech = ccColdIdBech; //option to write out the generated id to a file
 
 							if ( args['vkey-extended'] === true ) {
 								var vkeyContent = `{ "type": "ConstitutionalCommitteeColdExtendedVerificationKey_ed25519_bip32", "description": "Constitutional Committee Cold Extended Verification Key", "cborHex": "${pubKeyCbor}" }`;
@@ -1994,6 +2013,7 @@ async function main() {
 							//also generate the cc id in hex and bech format
 							var ccHotIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 							var ccHotIdBech = bech32.encode("cc_hot", bech32.toWords(Buffer.from(ccHotIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+							var outIdBech = ccHotIdBech; //option to write out the generated id to a file
 
 							if ( args['vkey-extended'] === true ) {
 								var vkeyContent = `{ "type": "ConstitutionalCommitteeHotExtendedVerificationKey_ed25519_bip32", "description": "Constitutional Committee Hot Extended Verification Key", "cborHex": "${pubKeyCbor}" }`;
@@ -2013,6 +2033,7 @@ async function main() {
 								case 'CALIDUS': //path is --path calidus -> generate the calidusID and special description for the skey/vkey content
 									var calidusIdHex = `a1${getHash(pubKeyHex, 28)}`; //hash the publicKey with blake2b_224 (28bytes digest length) and add the prebyte a1=CalidusPoolKey
 									var calidusIdBech = bech32.encode("calidus", bech32.toWords(Buffer.from(calidusIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+									var outIdBech = calidusIdBech; //option to write out the generated id to a file
 									var keyFileDescription = "Calidus Pool"
 									break;
 
@@ -2052,6 +2073,7 @@ async function main() {
 					//also generate the pool id in hex and bech format
 					var poolIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
 					var poolIdBech = bech32.encode("pool", bech32.toWords(Buffer.from(poolIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+					var outIdBech = poolIdBech; //option to write out the generated id to a file
 					break;
 
 
@@ -2093,18 +2115,18 @@ async function main() {
 			if ( typeof out_file === 'undefined' || out_file === true ) { console.log(content); }
 			else { //else try to write the content out to the given file
 				try {
-				fs.writeFileSync(out_file,content, 'utf8')
-				// file written successfully
+					fs.writeFileSync(out_file,content, 'utf8')
+					// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 
-			//output a secret file (.skey)
+			//output a secret key file (.skey)
 			var out_skey = args['out-skey'];
 		        //if there is a --out-skey parameter specified then try to write output the file
 			if ( typeof out_skey === 'string' && out_skey != '' ) {
 				try {
-				fs.writeFileSync(out_skey,JSON.stringify(JSON.parse(skeyContent), null, 2) + '\n', 'utf8')
-				// file written successfully
+					fs.writeFileSync(out_skey,JSON.stringify(JSON.parse(skeyContent), null, 2) + '\n', 'utf8')
+					// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 
@@ -2113,8 +2135,28 @@ async function main() {
 		        //if there is a --out-vkey parameter specified then try to write output the file
 			if ( typeof out_vkey === 'string' && out_vkey != '' ) {
 				try {
-				fs.writeFileSync(out_vkey,JSON.stringify(JSON.parse(vkeyContent), null, 2) + '\n', 'utf8')
-				// file written successfully
+					fs.writeFileSync(out_vkey,JSON.stringify(JSON.parse(vkeyContent), null, 2) + '\n', 'utf8')
+					// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output an id file (.id)
+			var out_id = args['out-id'];
+		        //if there is a --out-id parameter specified then try to write the produced id into a file
+			if ( typeof out_id === 'string' && out_id != '' && outIdBech != '' ) {
+				try {
+					fs.writeFileSync(out_id, `${outIdBech}\n`, 'utf8')
+					// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output a mnemonics file (.mnemonics)
+			var out_mnemonics = args['out-mnemonics'];
+		        //if there is a --out-mnemonics parameter specified then try to write the used mnemonics into a file
+			if ( typeof out_mnemonics === 'string' && out_mnemonics != '' && mnemonics != '' ) {
+				try {
+					fs.writeFileSync(out_mnemonics, `${mnemonics}\n`, 'utf8')
+					// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
 
