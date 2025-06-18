@@ -102,13 +102,14 @@ Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88 mode:
    Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
 
 
-Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519 algorithm):
+Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519/CIP-8 algorithm):
 
    Syntax: cardano-signer sign --cip100
    Params: --data "<jsonld-text>" | --data-file "<path_to_jsonld_file>"
                                                                 data or file in jsonld format to sign
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            --author-name "<name-of-signing-author>"             name of the signing author f.e. "John Doe"
+           [--address "<path_to_file>|<hex>|<bech>"]	     	optional path to an address/id-file or a direct bech/hex format 'stake1..., addr1..., drep1...' to sign with CIP-8 algorithm
            [--replace]                                          optional flag to replace the authors entry with the same public-key
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "Signed JSON-LD Content" or "JSON-HashInfo if --out-file is used"
