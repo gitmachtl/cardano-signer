@@ -41,7 +41,7 @@
 
 $ cardano-signer help
 
-cardano-signer 1.24.3
+cardano-signer 1.26.0
 
 Sign a hex/text-string or a binary-file:
 
@@ -50,6 +50,7 @@ Sign a hex/text-string or a binary-file:
                                                                 data/payload/file to sign in hex-, text- or binary-file-format
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            [--address "<path_to_file>|<hex>|<bech>"]            optional address check against the signing-key (address-file or a direct bech/hex format)
+           [--include-secret]                                   optional flag to include the secret/signing key in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--jcli | --bech]                                    optional flag to generate signature & publicKey in jcli compatible bech-format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
@@ -68,6 +69,8 @@ Sign a payload in CIP-8 / CIP-30 mode: (COSE_Sign1 only currently)
            [--hashed]                                           optional flag to hash the payload given via the 'data' parameters
            [--nopayload]                                        optional flag to exclude the payload from the COSE_Sign1 signature, default: included
            [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
+           [--include-maps]                                     optional flag to include the COSE maps in the json-extended output
+           [--include-secret]                                   optional flag to include the secret/signing key in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "COSE_Sign1 + COSE_Key" or JSON-Format
@@ -84,18 +87,20 @@ Sign a catalyst registration/delegation or deregistration in CIP-36 mode:
            [--vote-purpose <unsigned_int>]                      optional parameter (unsigned int), default: 0 (catalyst)
            [--deregister]                                       optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--payment-address needed
            [--testnet-magic [xxx]]                              optional flag to switch the address check to testnet-addresses, default: mainnet
+           [--include-secret]                                   optional flag to include the secret/signing key in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format, default: cborHex(text)
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
            [--out-cbor "<path_to_file>"]                        path to write a binary metadata.cbor file to
    Output: Registration-Metadata in JSON-, cborHex-, cborBinary-Format
 
 
-Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88 mode:
+Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 mode:
 
    Syntax: cardano-signer sign --cip88
    Params: --calidus-public-key "<path_to_file>|<hex>|<bech>"   public-key-file or public hex/bech-key string to use as the new calidus-key
            --secret-key "<path_to_file>|<hex>|<bech>"           signing-key-file or a direct signing hex/bech-key string of the stakepool
            [--nonce <unsigned_int>]                             optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used
+           [--include-secret]                                   optional flag to include the secret/signing key in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format, default: cborHex(text)
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
            [--out-cbor "<path_to_file>"]                        path to write a binary metadata.cbor file to
@@ -109,7 +114,7 @@ Sign a governance JSON-LD metadata file with a Secret-Key (add authors, ed25519/
                                                                 data or file in jsonld format to sign
            --secret-key "<path_to_file>|<hex>|<bech>"           path to a signing-key-file or a direct signing hex/bech-key string
            --author-name "<name-of-signing-author>"             name of the signing author f.e. "John Doe"
-           [--address "<path_to_file>|<hex>|<bech>"]	     	optional path to an address/id-file or a direct bech/hex format 'stake1..., addr1..., drep1...' to sign with CIP-8 algorithm
+           [--address "<path_to_file>|<hex>|<bech>"]            optional path to an address/id-file or a direct bech/hex format 'stake1..., addr1..., drep1...' to sign with CIP-8 algorithm
            [--replace]                                          optional flag to replace the authors entry with the same public-key
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "Signed JSON-LD Content" or "JSON-HashInfo if --out-file is used"
@@ -144,12 +149,13 @@ Verify a CIP-8 / CIP-30 payload: (COSE_Sign1 only currently)
    Output: "true/false" (exitcode 0/1) or JSON-Format
 
 
-Verify CIP-88 Calidus-Pool-PublicKey registration-data:
+Verify CIP-88v2 Calidus-Pool-PublicKey registration-data:
 
    Syntax: cardano-signer verify --cip88
    Params: --data "<json-metadata>" |                           data to verify as json text
            --data-file "<path_to_file>" |                       data to verify as json file
            --data-hex "<hex>"                                   data to verify as cbor-hex-format
+           [--include-maps]                                     optional flag to include the COSE maps in the json-extended output
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
    Output: "true/false" or JSON-Format
@@ -179,8 +185,10 @@ Generate Cardano ed25519/ed25519-extended keys:
            [--vkey-extended]                                    optional flag to generate a 64byte publicKey with chain code
            [--json | --json-extended]                           optional flag to generate output in json/json-extended format
            [--out-file "<path_to_file>"]                        path to an output file, default: standard-output
-           [--out-skey "<path_to_skey_file>"]                   path to an output skey-file
-           [--out-vkey "<path_to_vkey_file>"]                   path to an output vkey-file
+           [--out-skey "<path_to_skey_file>"]                   path to an output skey-file (writes out a typical *.skey json)
+           [--out-vkey "<path_to_vkey_file>"]                   path to an output vkey-file (writes out a typical *.vkey json)
+           [--out-id "<path_to_id_file>"]                       path to an output id-file (writes out the bech-id of a pool, drep, calidus,...)
+           [--out-mnemonics "<path_to_id_file>"]                path to an output mnemonics-file (writes out the used mnemonics into a file)
    Output: "secretKey + publicKey" or JSON-Format               default: hex-format
 
 
@@ -481,7 +489,7 @@ true
 
 ## *Signing - Generate the COSE_Sign1 & COSE_Key*
 
-![image](https://user-images.githubusercontent.com/47434720/208512729-e0119b98-5d26-458f-8575-ecbb3d64241c.png)
+![image](https://github.com/user-attachments/assets/8de00aa9-ce1e-4c68-97ae-3cf51766d1fe)
 
 ### Sign some text-data payload
 
@@ -581,7 +589,7 @@ Output - **COSE_Sign1 Signature & COSE_Key publicKey** (hex):
 
 ## *Verification*
 
-![image](https://user-images.githubusercontent.com/47434720/208522843-296257c8-fced-4573-8592-85f10b0f4762.png)
+![image](https://github.com/user-attachments/assets/f008bf29-47f9-4144-9bdb-0e981cd0bf91)
 
 ### Verify COSE_Sign1 & COSE_Key data
 
@@ -595,11 +603,11 @@ To **verify** the COSE data with a **detailed output** run:
 cardano-signer verify --cip8 \
 	--cose-sign1 84582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8a166686173686564f44b48656c6c6f20776f726c645840fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001 \
 	--cose-key a4010103272006215820755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9 \
-	--json-extended
+	--json-extended \
+	--include-maps
 ```
-This outputs the detailed json:
+This outputs the detailed json inlusive the used COSE maps:
 ``` json
-{
   "workMode": "verify-cip8",
   "result": "true",
   "addressHex": "617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
@@ -609,7 +617,33 @@ This outputs the detailed json:
   "isHashed": "false",
   "verifyDataHex": "846a5369676e617475726531582aa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8404b48656c6c6f20776f726c64",
   "signature": "fc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001",
-  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+  "publicKey": "755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9",
+  "maps": {
+    "COSE_Key": {
+      "1": 1,
+      "3": -8,
+      "-1": 6,
+      "-2": "0x755b017578b701dc9ddd4eaee67015b4ca8baf66293b7b1d204df426c0ceccb9"
+    },
+    "COSE_Sign1": [
+      "0xa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+      {
+        "hashed": false
+      },
+      "0x48656c6c6f20776f726c64",
+      "0xfc58155f0cee05bc00e7299af1df1f159ac82a46a055786b259657934eff346eec81349d4678ceabc79f213c66a2bdbfd4ea5d9ebdc630bee5ac9cce75cfc001"
+    ],
+    "verifyData": [
+      "Signature1",
+      "0xa201276761646472657373581d617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8",
+      "0x",
+      "0x48656c6c6f20776f726c64"
+    ],
+    "protectedHeader": {
+      "1": -8,
+      "address": "0x617863b5c43bdf0a06608abc82f0573a549714ff69166074dcdde393d8"
+    }
+  }
 }
 ```
 You see that the verification was successful, the used signing-address, and payload was not hashed.
@@ -851,7 +885,7 @@ The output is a human-readable json format, if you redirect it to a file via the
 
 # KeyGeneration mode
 
-![image](https://github.com/user-attachments/assets/ffc1ab3b-338f-4042-a4bc-8e170e1a61f4)
+![image](https://github.com/user-attachments/assets/be93a16e-3e41-4b17-a7e2-8a2428833af8)
 
 ## *Normal ed25519 keypair without derivation-path/mnemonics*
 
@@ -954,9 +988,10 @@ This generated mnemonics are in the Shelley(Icarus) standard BIP39 format and wi
 Also a `Xpub...` key was generated, which can be used to view wallet data in external tracking apps.
 <br>
 
-### Generate .skey/.vkey files
+### Generate .skey/.vkey/.id/.mnemonics files
 
 Like with the normal ed25519 keys, use the `--out-skey` & `--out-vkey` parameters to directly write out .skey/.vkey files.
+But since v1.26 you can also directly write out id-files like Pool-ID, DRep-ID, Calidus-ID and the used mnemonics via the parameters `--out-id` & `--out-mnemonics`.
 ``` console
 cardano-signer keygen \
 	--path 1852H/1815H/0H/2/0 \
@@ -979,6 +1014,47 @@ This generates the typical .skey/.vkey files with content like
   "cborHex": "5820a74b785851b0d36b8add6dc24d94112fe18e9fa4e60cc0e420002f77b5ce8148"
 }
 ```
+
+Here is an example of a pool-key generation inclusive id and mnemonics
+``` console
+cardano-signer keygen \
+	--path pool \
+	--json-extended \
+	--out-skey myPool.skey \
+	--out-vkey myPool.vkey \
+	--out-id myPool.id \
+	--out-mnemonics myPool.mnemonics
+```
+```json
+{
+  "workMode": "keygen",
+  "derivationPath": "1853H/1815H/0H/0H",
+  "derivationType": "icarus",
+  "mnemonics": "suit want industry omit this alley april critic pyramid hammer grape tribe kiss thank uncle cry dizzy clip rocket bargain alien alert indoor income",
+  "rootKey": "e84c124872e157607670dae9786f04b6861e0b5a0d0591affc1c230a71541f484eee30649b8e8b7861280b950b64ae95bbc8f5bc5ebfe185e77b9a8fe5c255564c5cced60e47308b45e23773b03752965f05af023e0092873d6cbb9bdf7067dd",
+  "secretKey": "68de999d1f784849051d91e51c2ca03ee21e4d7ff3435e4e6d0d7e0589541f48d1db9fc8d923bf8e80c48a2bf2154a907bd7cf38bd8bc20b87b7109fceecc9aa8d00b47d79e43ddfea595bfb9afcbc0c501848a1b69f2d1496d25dc1e8f0f8e64145b26208ae4034dcd60be9284b4d720abb3d199552bce8218b674b6aff12f1",
+  "publicKey": "8d00b47d79e43ddfea595bfb9afcbc0c501848a1b69f2d1496d25dc1e8f0f8e6",
+  "XpubKeyHex": "84f39198db32ccb38c1061ce34cc4b1089e995ad9158b18080a6fdb89ffb3f4666ac859addad20f8c788c063d5b5f029c4b230da928544f2d4ca1a9aa260a9fa",
+  "XpubKeyBech": "xpub1sneerxxmxtxt8rqsv88rfnztzzy7n9ddj9vtrqyq5m7m38lm8arxdty9ntw66g8cc7yvqc74khczn39jxrdf9p2y7t2v5x565fs2n7s6gjl50",
+  "poolIdHex": "0bd4f1ae2306805d768d371137c8a69e7fa3b5486a3c6013e20f48e0",
+  "poolIdBech": "pool1p020rt3rq6q96a5dxugn0j9xnel68d2gdg7xqylzpaywqnwl6fv",
+  "secretKeyBech": "pool_xsk1dr0fn8gl0pyyjpgaj8j3ct9q8m3puntl7dp4unndp4lqtz25raydrkulervj80uwsrzg52ljz49fq77heuutmz7zpwrmwyylemkvn25dqz68670y8h075k2mlwd0e0qv2qvy3gdknuk3f9kjthq73u8cueq5tvnzpzhyqdxu6c97j2ztf4eq4wearx24908gyx9kwjm2luf0zfyuckz",
+  "publicKeyBech": "pool_vk135qtglteus7al6jet0ae4l9up3gpsj9pk60j69yk6fwur68slrnqn9dlyz",
+  "output": {
+    "skey": {
+      "type": "StakePoolExtendedSigningKey_ed25519_bip32",
+      "description": "Stake Pool Operator Signing Key",
+      "cborHex": "588068de999d1f784849051d91e51c2ca03ee21e4d7ff3435e4e6d0d7e0589541f48d1db9fc8d923bf8e80c48a2bf2154a907bd7cf38bd8bc20b87b7109fceecc9aa8d00b47d79e43ddfea595bfb9afcbc0c501848a1b69f2d1496d25dc1e8f0f8e64145b26208ae4034dcd60be9284b4d720abb3d199552bce8218b674b6aff12f1"
+    },
+    "vkey": {
+      "type": "StakePoolVerificationKey_ed25519",
+      "description": "Stake Pool Operator Verification Key",
+      "cborHex": "58208d00b47d79e43ddfea595bfb9afcbc0c501848a1b69f2d1496d25dc1e8f0f8e6"
+    }
+  }
+}
+```
+The 4 files `myPool.skey, myPool.vkey, myPool.id & myPool.mnemonics` have been created. You can also directly see the poolId and other informations in the output json like above.
 
 <br>
 
@@ -1286,7 +1362,7 @@ Like with the examples before, you can directly also write out .skey/.vkey files
 
 ## Sign governance metadata and add author(s) field
 
-![image](https://github.com/user-attachments/assets/06217286-dd0c-4536-bc27-201fd5d5ea72)
+![image](https://github.com/user-attachments/assets/e6a680c2-8da6-47d8-91cd-5af84ba73d0a)
 
 If you input a JSONLD governance file (context part not shown) like
 ```json
@@ -1370,6 +1446,16 @@ generates you the governance metadata file with the added signature:
 }
 ```
 
+Please notice, if you want to author-sign in `CIP-0008` mode, you must provide an additional address via the `--address` parameter. This can be a filename, bech-address/id or a hex-hash.
+``` console
+cardano-signer.js sign --cip100 \
+                       --data-file CIP108-example.json \
+                       --secret-key dummy.skey \
+                       --address dummmy.addr \
+                       --author-name "The great Name" \
+                       --out-file CIP108-example-signed.json
+```
+
 Cardano-Signer is doing the following steps to sign the document:
 * check that the provided input data is a valid JSON file
 * canonize the `@context` and `body` part via URDNA2015 method and hash it via black2b-256 method
@@ -1384,8 +1470,9 @@ Also, if you write out the new file directly via the `--out-file` parameter, the
 ```json
 {
   "workMode": "sign-cip100",
+  "witnessAlgorithm": "CIP-0008",
   "outFile": "CIP108-example-signed.json",
-  "anchorHash": "8723898521770d095f522a3976f8318128f97ae10b8cd97da0f66dd29f849f80"
+  "anchorHash": "80947b18ad1e75919b103c5613ea69f96e9f27b930a3f17343e22223c5fa3d0f"
 }
 ```
 
@@ -1564,7 +1651,7 @@ Its a standard ed25519 signing/verification in the end, so there are plenty of l
 
 ## *Signing - Generate the registration metadata*
 
-![image](https://github.com/user-attachments/assets/35e7db4d-c744-4b19-bb03-257d20492b3b)
+![image](https://github.com/user-attachments/assets/cefa22f3-3596-440e-8a17-4db09f164a3b)
 
 Generating the registration metadata with Cardano-Signer is easy. All you need is the Calidus Public-Key as a `*.vkey` file, hex or bech format. You also need the Stakepool Cold-Key for the signing.
 
@@ -1577,6 +1664,8 @@ We can use the standard `--path calidus` for this. Lets generate ourself a new C
 cardano-signer keygen --path calidus \
 	--out-skey myCalidusKey.skey \
 	--out-vkey myCalidusKey.vkey \
+	--out-id myCalidusKey.id \
+	--out-mnemonics myCalidusKey.mnemonics \
 	--json-extended
 ```
 The output in json format:
@@ -1585,28 +1674,30 @@ The output in json format:
   "workMode": "keygen",
   "derivationPath": "1852H/1815H/0H/0/0",
   "derivationType": "icarus",
-  "mnemonics": "cinnamon brief fuel rotate horror author film noble enough priority hat wide glimpse occur clutch motor marble manage donor say bronze coach bamboo crime",
-  "rootKey": "a85b969997cb688b51c2f6d7acfb0709e34ac5acd75899c9e24c0027dc329d5474d09224ae7f0cf81424c71452db9632647e1185aa10fa14b9dc7f0c54acb404ba255eff1175274f86892fffa07dffdf346bd80b543e50b71bb74aaaef88d0ea",
-  "secretKey": "1053a319c116a0d2a1598a942c62741c275558512d72a8723f41c317e7329d5415fb9a06bdef60b5b65e86f20aa92e80d3af1e3e6684d760b2de7681af904ee7699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa0ed434d5f7998854cf1073e74e29078feaa93909f4e12d1c6e8d1e3ac977b9ac",
-  "publicKey": "699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa",
-  "XpubKeyHex": "8799250d456ac16ea07df64f7868e4c37160b0a1497f6c569d00b388f69186477f501827598a57f204bd5552abc444ffa8e3c216a9ab96f622a89aef598c3804",
-  "XpubKeyBech": "xpub1s7vj2r29dtqkagra7e8hs68ycdckpv9pf9lkc45aqzec3a53serh75qcyavc54ljqj74254tc3z0l28rcgt2n2uk7c323xh0txxrspq0jdyqy",
+  "mnemonics": "clap eye hazard exit blossom help lamp fatigue neck month rely include build link all impose asset correct blood olive cushion garage hundred open",
+  "rootKey": "e84ee3b01ecb6516f1f232947a0cfa146ae5deee79083b51da3ecad0c111f75f9aae9463181aef81785a9833199c719fec8a3e5b2bffeddb3bb56ea9f920fed2120339808f21ad5b2c7a1e40706e3ba4e5edc4cd7ea772f5ee3669114528c938",
+  "secretKey": "1080c35aa98d7c7e60d585a9c011708874cfe94f96327afdcb871459d211f75ff8b52c7ed88756c448a0023a9375c17db9307030347410e74bf576b311a2a605369b9aa06aa9389d6ba87b524846056c69b8b0221bdeb91bef814f1883cc86c31a16ab2f516a27198c62d78dd64f0d2b94e7d22de03304d4882f6301f443f255",
+  "publicKey": "369b9aa06aa9389d6ba87b524846056c69b8b0221bdeb91bef814f1883cc86c3",
+  "XpubKeyHex": "23d9cd311ada7e0d93ceb1706b0366049e523e5c1124d001619516ab0bfa9a638f16ed0adef34334b59434b1242dedfbe860a35d517f5dd9dd2b0f8ec1dd8bfc",
+  "XpubKeyBech": "xpub1y0vu6vg6mflqmy7wk9cxkqmxqj09y0juzyjdqqtpj5t2kzl6nf3c79hdpt00xse5kk2rfvfy9hklh6rq5dw4zl6am8wjkruwc8wchlq0r67ry",
+  "calidusIdHex": "a15f3053586a2d8ec767523b1d8482d97933bc0bcab57f619691903c47",
+  "calidusIdBech": "calidus1590nq56cdgkca3m82ga3mpyzm9un80qte26h7cvkjxgrc3chqexdf",
   "output": {
     "skey": {
       "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
       "description": "Calidus Pool Signing Key",
-      "cborHex": "58801053a319c116a0d2a1598a942c62741c275558512d72a8723f41c317e7329d5415fb9a06bdef60b5b65e86f20aa92e80d3af1e3e6684d760b2de7681af904ee7699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa0ed434d5f7998854cf1073e74e29078feaa93909f4e12d1c6e8d1e3ac977b9ac"
+      "cborHex": "58801080c35aa98d7c7e60d585a9c011708874cfe94f96327afdcb871459d211f75ff8b52c7ed88756c448a0023a9375c17db9307030347410e74bf576b311a2a605369b9aa06aa9389d6ba87b524846056c69b8b0221bdeb91bef814f1883cc86c31a16ab2f516a27198c62d78dd64f0d2b94e7d22de03304d4882f6301f443f255"
     },
     "vkey": {
       "type": "PaymentVerificationKeyShelley_ed25519",
       "description": "Calidus Pool Verification Key",
-      "cborHex": "5820699e69a1f6142252fcc44ca2832ef7f90c94c5860a24fba3efbbd8f5e319b1fa"
+      "cborHex": "5820369b9aa06aa9389d6ba87b524846056c69b8b0221bdeb91bef814f1883cc86c3"
     }
   }
 }
 ```
 
-Cardano-Signer generated a new key-pair for you `myCalidusKey.skey & myCalidusKey.vkey`. You can also see the used mnemonics for the key generation. This mnemonic can be reused in a LightWallet of your choice.
+Cardano-Signer generated a new key-pair for you `myCalidusKey.skey & myCalidusKey.vkey`, and also the `myCalidusKey.id` file which holds your calidus-bech-id. In addition you also got a file `myCalidusKey.mnemonics`, which holds the used mnemonic words. You can restore your calidus key in the light wallet of your choice with those mnemonics. In the output JSON, you can also see all those informations.
 
 ### 2. Generate the registration metadata
 
