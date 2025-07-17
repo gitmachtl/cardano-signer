@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.26.0"
+const version = "1.27.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -21,7 +21,7 @@ const parse_options = {
 		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics',
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
 
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister',
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
 		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps', 'include-secret'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
@@ -151,6 +151,7 @@ function showUsage(topic, exit = true){
 		console.log(`           ${FgGreen}--author-name${Reset} "<name-of-signing-author>"		${Dim}name of the signing author f.e. "John Doe"${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional path to an address/id-file or a direct bech/hex format 'stake1..., addr1..., drep1...' to sign with CIP-8 algorithm${Reset}`);
 		console.log(`           [${FgGreen}--replace${Reset}]						${Dim}optional flag to replace the authors entry with the same public-key${Reset}`);
+		console.log(`           [${FgGreen}--disable-safemode${Reset}]					${Dim}optional flag to disable the safe-mode for the jsonld canonization${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"Signed JSON-LD Content"${Reset} or ${FgCyan}"JSON-HashInfo if --out-file is used"${Reset}`);
 	        console.log(``)
@@ -214,6 +215,7 @@ function showUsage(topic, exit = true){
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
 		console.log(`								${Dim}data or file in jsonld format to verify${Reset}`);
+		console.log(`           [${FgGreen}--disable-safemode${Reset}]					${Dim}optional flag to disable the safe-mode for the jsonld canonization${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"true/false"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -255,6 +257,7 @@ function showUsage(topic, exit = true){
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}canonize --cip100${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<jsonld-text>" | ${FgGreen}--data-file${Reset} "<path_to_jsonld_file>"${Reset}`);
 		console.log(`								${Dim}data or file in jsonld format to canonize and hash${Reset}`);
+		console.log(`           [${FgGreen}--disable-safemode${Reset}]					${Dim}optional flag to disable the safe-mode for the jsonld canonization${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-canonized${Reset} "<path_to_file>"]			${Dim}path to an output file for the canonized data${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -2191,8 +2194,12 @@ async function main() {
 				if ( jsonld_data["body"] === undefined || jsonld_data["@context"] === undefined ) { console.error(`Error: JSON-LD must contain '@context' and 'body' data`); process.exit(1); }
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
+			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
+			var safeMode = true;
+			if ( args['disable-safemode'] === true ) { safeMode = false; }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
@@ -2291,8 +2298,12 @@ async function main() {
 				var jsonld_data = { "body" : jsonld_input["body"], "@context": jsonld_input["@context"] }; // var jsonld_data = {}; jsonld_data["body"] = jsonld_doc["body"]; jsonld_data["@context"] = jsonld_doc["@context"];
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
+			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
+			var safeMode = true;
+			if ( args['disable-safemode'] === true ) { safeMode = false; }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
@@ -2468,8 +2479,12 @@ async function main() {
 				var jsonld_data = { "body" : jsonld_input["body"], "@context": jsonld_input["@context"] }; // var jsonld_data = {}; jsonld_data["body"] = jsonld_doc["body"]; jsonld_data["@context"] = jsonld_doc["@context"];
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
+			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
+			var safeMode = true;
+			if ( args['disable-safemode'] === true ) { safeMode = false; }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: false, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
