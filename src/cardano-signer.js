@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.27.0"
+const version = "1.28.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -22,7 +22,7 @@ const parse_options = {
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
 
 	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
-		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps', 'include-secret'], //all booleans are set to false per default
+		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
@@ -72,6 +72,7 @@ function showUsage(topic, exit = true){
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}path to a signing-key-file or a direct signing hex/bech-key string${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<bech>"]		${Dim}optional address check against the signing-key (address-file or a direct bech/hex format)${Reset}`);
 		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
+		console.log(`           [${FgGreen}--signature-only${Reset}]					${Dim}optional flag to only output the signature in std-output without the publicKey${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--jcli${Reset} |${FgGreen} --bech${Reset}]					${Dim}optional flag to generate signature & publicKey in jcli compatible bech-format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -96,6 +97,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
+		console.log(`           [${FgGreen}--signature-only${Reset}]					${Dim}optional flag to only output the COSE_Sign1 in std-output without the COSE_Key${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 	        console.log(`   Output: ${FgCyan}"COSE_Sign1 + COSE_Key"${Reset} or ${FgCyan}JSON-Format${Reset}`);
@@ -105,7 +107,7 @@ function showUsage(topic, exit = true){
 	case 'sign-cip36':
 	case 'sign-cip36-deregister':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign a catalyst registration/delegation or deregistration in CIP-36 mode:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign and generate a catalyst registration/delegation or deregistration in CIP-36 mode:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip36${Reset}`);
 		console.log(`   Params: [${FgGreen}--vote-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file(s) or public hex/bech-key string(s) to delegate the votingpower to (single or multiple)${Reset}`);
@@ -126,7 +128,7 @@ function showUsage(topic, exit = true){
 
 	case 'sign-cip88':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 mode:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign and generate a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 mode:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip88${Reset}`);
 		console.log(`   Params: ${FgGreen}--calidus-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to use as the new calidus-key${Reset}`);
@@ -233,7 +235,8 @@ function showUsage(topic, exit = true){
 		console.log(`   Params: [${FgGreen}--path${Reset} "<derivationpath>"]				${Dim}optional derivation path in the format like "1852H/1815H/0H/0/0" or "1852'/1815'/0'/0/0"${Reset}`);
 		console.log(`								${Dim}or predefined names: --path payment, --path stake, --path cip36, --path drep, --path cc-cold,${Reset}`);
 		console.log(`								${Dim}                     --path cc-hot, --path pool, --path calidus${Reset}`);
-		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24"]		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
+		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24" 		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
+		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor${Reset}] 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
@@ -1014,7 +1017,8 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 				content += ` }`
 
 			} else { //generate content in text format
-				var content = COSE_Sign1_cbor_hex + " " + COSE_Key_cbor_hex;
+				var content = COSE_Sign1_cbor_hex;
+				if ( sub_args['signature-only'] === false ) { content += ` ${COSE_Key_cbor_hex}`; } //the output of the COSE_Key can be surpressed via the --signature-only flag
 			}
 
 			//return the whole content and also the COSE_Sign1 & COSE_Key
@@ -1146,7 +1150,8 @@ async function main() {
 					content += `, "secretKey": "${prvKeyHex}"`; }
 				content += ` }`;
 			} else { //generate content in text format
-				var content = signature + " " + pubKey;
+				var content = signature;
+				if ( args['signature-only'] === false ) { content += ` ${pubKey}`; } //the output of the public-key can be surpressed via the --signature-only flag
 			}
 
 			//output the signature data and the public key to the console or to a file
@@ -1745,7 +1750,7 @@ async function main() {
                 case "keygen-trezor":
 
 			//setup
-			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = '';
+			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = ''; drepIdHexLegacy = '', drepIdBechLegacy = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
 			var rootKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
@@ -1783,9 +1788,18 @@ async function main() {
 			//get mnemonics parameter, if ok set the mnemonics variable
 			var mnemonics = args['mnemonics'];
 		        if ( typeof mnemonics === 'string' && mnemonics != '' ) { //ok, mnemonics were provided let check
-				mnemonics = trimMnemonic(mnemonics.toLowerCase());
-				var mnemonicsWordCount = wordCount(mnemonics);
-				if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: Please provide between 12 and 24 words for the --mnemonics.`); process.exit(1); }
+
+				// try to use the parameter as a filename for mnemonics stored in it (typical .mnemonics files)
+				try {
+					mnemonics = trimMnemonic(fs.readFileSync(mnemonics,'utf8').toLowerCase()); //read the mnemonics out of the file, convert to lower-case, trim it
+					var mnemonicsWordCount = wordCount(mnemonics);
+					if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: The given mnemonics-file does not contain between 12 and 24 words.`); process.exit(1); }
+				} catch (error) {
+						// no file found, so use it as regular given mnemonics
+						mnemonics = trimMnemonic(mnemonics.toLowerCase());
+						var mnemonicsWordCount = wordCount(mnemonics);
+						if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: Please provide between 12 and 24 words for the --mnemonics.`); process.exit(1); }
+						}
 
 				//calculate the entropy of the given mnemonic
 				try {
@@ -1968,8 +1982,10 @@ async function main() {
 							var skeyContent = `{ "type": "DRepExtendedSigningKey_ed25519_bip32", "description": "Delegate Representative Signing Key", "cborHex": "${prvKeyCbor}" }`;
 							var prvKeyBech = bech32.encode("drep_xsk", bech32.toWords(Buffer.from(prvKeyHex, "hex")), 256); //encode in bech32 with a raised limit to 256 words because of the extralong privatekey (128bytes)
 
-							//also generate the drep id in hex and bech format
-							var drepIdHex = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+							//also generate the drep id in hex and bech format in legacy (CIP105) and newer CIP129 format
+							var drepIdHexLegacy = getHash(pubKeyHex, 28); //hash the publicKey with blake2b_224 (28bytes digest length)
+							var drepIdBechLegacy = bech32.encode("drep", bech32.toWords(Buffer.from(drepIdHexLegacy, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
+							var drepIdHex = `22${drepIdHexLegacy}`; //CIP129 format
 							var drepIdBech = bech32.encode("drep", bech32.toWords(Buffer.from(drepIdHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash (56bytes)
 							var outIdBech = drepIdBech; //option to write out the generated id to a file
 
@@ -2101,7 +2117,7 @@ async function main() {
 				if ( rootKeyHex != '' ) { content += `, "rootKey": "${rootKeyHex}"`; }
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
-				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}"`; }
+				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}", "drepIdHexLegacy": "${drepIdHexLegacy}", "drepIdBechLegacy": "${drepIdBechLegacy}"`; }
 				else if ( ccColdIdHex != '' ) { content += `, "ccColdIdHex": "${ccColdIdHex}", "ccColdIdBech": "${ccColdIdBech}"`; }
 				else if ( ccHotIdHex != '' ) { content += `, "ccHotIdHex": "${ccHotIdHex}", "ccHotIdBech": "${ccHotIdBech}"`; }
 				else if ( poolIdHex != '' ) { content += `, "poolIdHex": "${poolIdHex}", "poolIdBech": "${poolIdBech}"`; }
