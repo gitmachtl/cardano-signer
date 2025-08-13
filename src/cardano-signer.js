@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.28.0"
+const version = "1.29.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -13,16 +13,17 @@ const fnv32 = require('fnv32'); //used for CIP-8/CIP-30 checksum generation (fnv
 const bip39 = require('bip39'); //used for mnemonics operations
 const crypto = require('crypto'); //used for crypto functions like entropy generation
 const jsonld = require('jsonld'); //used for canonizing json data (governance CIP-0100 metadata)
+const crc32 = require('crc').crc32; //currently only used for byron addressDataChecksum calculation
 
 //set the options for the command-line arguments, so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
 
 	string:	['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key',
-		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics',
+		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics', 'out-addr',
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
 
 	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
-		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
+		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'byron', 'yoroi', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
@@ -46,6 +47,8 @@ const args = require('minimist')(process.argv.slice(3),parse_options); //slice(3
 const regExpHex = /^[0-9a-fA-F]+$/;		//matches a hex-string
 const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;	//matches a hex-string with an optional 0x at the beginning
 const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
+const regExpPathByron = /^[0-9]+H\/[0-9]+H(\/[0-9]+H){0,3}$/;  //path: first two elements must be hardened, than its open, max. 5 elements
+const regExpPathYoroi = /^44H\/1815H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first two elements must always be 44H/1815H, max. 5 elements
 const regExpIntNumber = /^-?[0-9]+$/; 		//matches positive and optional negative integer numbers
 
 //catch all exceptions that are not catched via try
@@ -228,6 +231,8 @@ function showUsage(topic, exit = true){
 	case 'keygen-cip36':
 	case 'keygen-ledger':
 	case 'keygen-trezor':
+	case 'keygen-byron':
+	case 'keygen-yoroi':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Generate Cardano ed25519/ed25519-extended keys:${Reset}`)
 	        console.log(``)
@@ -238,7 +243,9 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24" 		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
 		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
-		console.log(`           [${FgGreen}--ledger | --trezor${Reset}] 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
+		console.log(`           [${FgGreen}--ledger | --trezor |${Reset} 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
+		console.log(`            ${FgGreen}--byron | --yoroi${Reset}]					${Dim}optional flag to set the derivation type to "Daedalus(Byron)" or "Yoroi(Byron)"${Reset}`);
+		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<base58>"]		${Dim}optional byron address (DDz...) in --byron mode to do an auto-derivation-path discovery${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
 		console.log(`           [${FgGreen}--vkey-extended${Reset}] 					${Dim}optional flag to generate a 64byte publicKey with chain code${Reset}`);
@@ -248,6 +255,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--out-vkey${Reset} "<path_to_vkey_file>"]			${Dim}path to an output vkey-file (writes out a typical *.vkey json)${Reset}`);
 		console.log(`           [${FgGreen}--out-id${Reset} "<path_to_id_file>"]			${Dim}path to an output id-file (writes out the bech-id of a pool, drep, calidus,...)${Reset}`);
 		console.log(`           [${FgGreen}--out-mnemonics${Reset} "<path_to_id_file>"]		${Dim}path to an output mnemonics-file (writes out the used mnemonics into a file)${Reset}`);
+		console.log(`           [${FgGreen}--out-addr${Reset} "<path_to_addr_file>"]			${Dim}path to an output addr-file (writes out an available address)${Reset}`);
 	        console.log(`   Output: ${FgCyan}"secretKey + publicKey"${Reset} or ${FgCyan}JSON-Format${Reset}		${Dim}default: hex-format${Reset}`);
 	        console.log(``)
 		break;
@@ -501,6 +509,7 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 				case '5': addr_type = 'script pointer'; break;
 				case '6': addr_type = 'payment enterprise'; break;
 				case '7': addr_type = 'script'; break;
+				case '8': addr_type = 'byron'; break;
 				case 'e': addr_type = 'stake'; break;
 				case 'f': addr_type = 'stake script'; break;
 				default: addr_type = 'unknown';
@@ -600,6 +609,293 @@ function deriveChecksumBits(entropyBuffer) {
                 .update(entropyBuffer)
                 .digest();
         return bytesToBinary(Array.from(hash)).slice(0, CS);
+}
+
+
+function generateByronMasterKeyFromMnemonic(mnemonic) {
+	//calculate an entropy from the given mnemonic words
+	try {
+		var entropy = bip39.mnemonicToEntropy(mnemonic);
+	} catch (error) { throw(`Could not calculate entropy from mnemonic '${error}'`); }
+
+	// example code for discrete generation:
+        // var ser_entropy = cbor.encode(Buffer.from(entropy,'hex')).toString('hex');
+        // hashed_ser_entropy = getHash(ser_entropy); //blake2b256
+        // var seed = cbor.encode(Buffer.from(hashed_ser_entropy,'hex')).toString('hex');
+
+	// byron seed for the MasterKey (rootKey) is calculated by the cbor format of the hashed(blake2b256) cbor format of the entropy
+	const seed = cbor.encode(Buffer.from(getHash(cbor.encode(Buffer.from(entropy,'hex'))),'hex')).toString('hex');
+
+	return generateByronMasterKeyFromSeed(seed);
+}
+
+
+function generateByronMasterKeyFromSeed(seed, iteration = 1) {
+	//seed as hexstring
+	//console.log(`iteration = ${iteration}`);
+        const message = `Root Seed Chain ${iteration}`; // message to crypt is a string 'Root Seed Chain ' and the number of iteration also as string
+        const cc = crypto.createHmac('sha512', Buffer.from(seed,'hex'))
+                .update(message)
+                .digest();
+	const iL = cc.subarray(0,32); //iL = left part of the cc (first part of MasterKey)
+	const iR = cc.subarray(32); //iR = right part of the cc (second part of MasterKey = chaincode)
+	const tweakedHash = crypto.createHash('sha512')
+                .update(iL)
+                .digest();
+        tweakedHash[0]  &= 0b1111_1000; // clear the lowest 3 bits
+        tweakedHash[31] &= 0b0111_1111; // clear the highest bit
+        tweakedHash[31] |= 0b0100_0000; // set the 2nd highest bit
+        if (tweakedHash[31] & 0b0010_0000) {
+                return generateByronMasterKeyFromSeed(seed, iteration+1);
+        }
+        var xprv = new Uint8Array([...tweakedHash, ...iR]) // build the final MasterKey from the tweakedHash and the chaincode(iR)
+        return xprv;
+}
+
+
+function deriveByronDaedalus(prvKeyHex, index) {
+	//This functions derives a child private key in byron method. There are differences to the standard BIP32 key derivation like BigEndian serialized index and different key calculation
+	//inputs:
+	//prvKeyHex - The full private key in hex (64bytes private key + 32bytes chain code)
+	//index - UInt index number, for byron its always hardened so >= 0x80000000 (but code example for soft indexes < 0x8000000 below)
+
+	//constants
+	const ed25519_order = BigInt(2**252) + 27742317777372353535851937790883648493n; // order for cardano ed25519 implementation
+
+	//throw an error if soft indexes
+	if (index < 0x80000000) { throw('Byron derivation path must only contain hardened indexes'); } // error if soft indexes
+
+	//split the given prvKeyHex into the key and chain code part
+	const prvKeyBuffer = Buffer.from(prvKeyHex.substring(0,128),'hex'); // private key are the first 64 bytes (128 hex chars)
+	var chainCodeBuffer = Buffer.from(prvKeyHex.substring(128),'hex'); // chaincode is starting at pos 64 bytes (the last 32 bytes)
+
+	//generate a buffer filled with the index number
+	const indexBuffer = Buffer.alloc(4,0); // indexBuffer 4 bytes long to hold the serialized index number
+	indexBuffer.writeUInt32BE(index,0); // write the index number to the indexBuffer (BigEndian encoding)
+
+	//compute Z and new chaincode for hardened indexes private method
+	var data = new Uint8Array([0x00, ...prvKeyBuffer, ...indexBuffer]);
+	var zBuffer = crypto.createHmac('sha512', chainCodeBuffer).update(data).digest('')
+	var data = new Uint8Array([0x01, ...prvKeyBuffer, ...indexBuffer]);
+	var chainCodeBuffer = crypto.createHmac('sha512', chainCodeBuffer).update(data).digest('').subarray(32) // generate a new chainCodeBuffer (the last 32 bytes)
+
+	//compute Z and new chaincode for soft indexes private method
+	// var data = new Uint8Array([0x02, ...prvKeyBuffer, ...indexBuffer]); var zBuffer = crypto.createHmac('sha512', chainCodeBuffer).update(data).digest('')
+	// var data = new Uint8Array([0x03, ...prvKeyBuffer, ...indexBuffer]); var chainCodeBuffer = crypto.createHmac('sha512', chainCodeBuffer).update(data).digest('').subarray(32) // generate a new chainCodeBuffer (the last 32 bytes)
+
+	//generate new private key LEFT part
+	const zLeftArray = new Uint8Array(zBuffer.subarray(0,32)).map(x => (x*8) & 0xFF);  // multiply every byte of the left part Z buffer * 8, but limit each value to only use the lowest 8 bit (0xFF)
+	const zLeftBigInt = BigInt(`0x${Buffer.from(zLeftArray).reverse().toString('hex')}`); // convert the array into a buffer with reversed order (little endian), than output it as hex to be used as a BigInt
+	const kLeftBigInt = BigInt(`0x${prvKeyBuffer.subarray(0,32).reverse().toString('hex')}`); // convert the left most 32 bytes of the private key (little endian) into a BigInt
+	const leftBigInt = (zLeftBigInt + kLeftBigInt) % ed25519_order; //new private key left part is: (zLeftInt+kLeftInt) modulo ed25519_order (32bytes long, little endian)
+	const kLeftBuffer = Buffer.from(leftBigInt.toString(16).padStart(32 * 2, '0').slice(0, 32 * 2), 'hex').reverse(); // convert the BigInt back into an 32 byte long Buffer (little endian)
+
+	//generate new private key RIGHT part
+	const zRightArray = new Uint8Array(zBuffer.subarray(32));  // right part of the Z buffer (last 32 bytes)
+	const kRightArray = new Uint8Array(prvKeyBuffer.subarray(32));  // right part of the private key buffer (last 32 bytes)
+	const rightArray = new Uint8Array(32).map((x,index) => { return (zRightArray[index]+kRightArray[index]) & 0xFF; }); //  new private key right part is: sum of each byte in zRightArray & kRightArray. only use lowest 8 bit (0xFF)
+	const kRightBuffer =  Buffer.from(rightArray);
+
+	//derived private key is the concat of the new left part + new right part + new chaincode
+	return Buffer.concat([kLeftBuffer,kRightBuffer,chainCodeBuffer]).toString('hex');
+}
+
+
+function generateByronDaedalusAddress(rootPubKeyHex, pubKeyExtHex, derivationPath) {
+	// This function generates a Byron-Address in base58 format like "DDz..." derived via byron-style
+	// inputs:
+	// rootPubKeyHex - The extended public key of the root derivation from the mnemonics, 64 bytes (32 bytes public, 32 bytes chaincode)
+	// pubKeyExtHex - The extended public key of the derived child/address, 64 bytes (32 bytes public, 32 bytes chaincode)
+	// derivationPath - String in the format '0H/1H'. Only hardened values are allowed.
+
+	// first we need to generate the serialized derivation path by going over each element, its just an cbor array with the element values
+	// example: 9f1a800000001a80000001ff for 0H/1H
+	var serPathHex = '9f' //start of indefinite array
+	const pathArray = derivationPath.split('/');
+	pathArray.forEach( (element, index) => {
+		//check if last char is an H, if so, add the hardened offset value
+		if ( element[element.length - 1] != 'H' ) { throw('Byron derivation path must only contain hardened elements'); }
+		element = element.slice(0,-1); //remove the last char 'H' so only a number is left
+		var numPath = 0x80000000 + Number(element); //hardened path 0x80000000 offset + value of element
+		serPathHex += `1a${numPath.toString(16)}`; //add the element number as uint cbor-hex
+	});
+	serPathHex += 'ff'; //end marker for the indefinite array
+
+	// now we need to encrypt the serialized derivation path (serPathHex), for that we need to generate the pass
+	// via pbkdf (algo=sha512, salt='address-hashing', rounds=500, length=32). that is than later used with the ChaCha20Poly1305 encryption
+	const rootPubKeyHDpass = crypto.pbkdf2Sync(Buffer.from(rootPubKeyHex,'hex'),'address-hashing',500,32,'sha512');
+	const nonce = Buffer.from('serokellfore','ascii'); //hardcoded
+	const key = Buffer.from(rootPubKeyHDpass);
+	const data = Buffer.from(serPathHex,'hex');
+	try {
+	    cipher = crypto.createCipheriv('chacha20-poly1305', key, nonce, {
+	      authTagLength: 16
+	    }),
+	    encrypted = Buffer.concat([
+	      cipher.update(data,'hex'),
+	        cipher.final()
+	    ]),
+	    tag = cipher.getAuthTag(),
+	    encryptedDerivationPath = Buffer.concat([encrypted, tag]).toString('hex');
+	} catch (error) { throw(`Could not encrypt the serialized derivation path '${error}'`); }
+
+	// address attributes generation
+	// this is a Map with key 1 with the serialized encryptedDerivationPath
+	// optionally it also contains a key 2, which holds the ProtocolMagic-Number in case of a Testnet usage
+	const addressAttributes = new Map().set(1, cbor.encode(Buffer.from(encryptedDerivationPath,'hex')));
+	//addressAttributes.set(2, cbor.encode(protocolMagic)); //only added for Testnet
+
+	// now lets generate the addressRootHash. thats the addressRoot which is than hashed with sha3-256 and blake2b-224
+	const addressRoot = cbor.encode([0,[0,Buffer.from(pubKeyExtHex,'hex')],addressAttributes]);
+	const addressRootSha3 = crypto.createHash('sha3-256').update(addressRoot).digest(); //sha3-256
+	const addressRootHash = getHash(addressRootSha3,28); //blake2b-224
+
+	// the addressAttributes, addressRootHash and addressType(0=PubKeyType,1=Script,2=Redeem) are now encoded into a cbor array
+	const addressDataEncoded = cbor.encode([Buffer.from(addressRootHash,'hex'), addressAttributes,0]);
+
+	// for the addressRaw generation, we combine the addressDataEncode and the CRC32 checksum of it into a tagged(24) cbor again
+	const addressRaw = cbor.encode([new cbor.Tagged(24, addressDataEncoded), crc32(addressDataEncoded)]);
+
+	// final step is to just convert the addressRaw bytes into base58
+	try {
+		var byronAddress = CardanoWasm.ByronAddress.from_bytes(addressRaw).to_base58();
+	} catch (error) { throw(`Could not convert addressRaw into base58 format '${error}'`); }
+
+	return byronAddress; // like 'DDz....'
+}
+
+
+function generateByronYoroiAddress(pubKeyExtHex) {
+	// This function generates a Byron-Address in base58 format like "Ae2..." for 15 word Icarus-Derivation Yoroi Mnemonics
+	// inputs:
+	// pubKeyExtHex - The extended public key of the derived child/address, 64 bytes (32 bytes public, 32 bytes chaincode)
+
+	// address attributes generation, this is an empty Map for Yoroi style byron addresses
+	const addressAttributes = new Map();
+
+	// now lets generate the addressRootHash. thats the addressRoot which is than hashed with sha3-256 and blake2b-224
+	const addressRoot = cbor.encode([0,[0,Buffer.from(pubKeyExtHex,'hex')],addressAttributes]);
+	const addressRootSha3 = crypto.createHash('sha3-256').update(addressRoot).digest(); //sha3-256
+	const addressRootHash = getHash(addressRootSha3,28); //blake2b-224
+
+	// the addressAttributes, addressRootHash and addressType(0=PubKeyType,1=Script,2=Redeem) are now encoded into a cbor array
+	const addressDataEncoded = cbor.encode([Buffer.from(addressRootHash,'hex'), addressAttributes,0]);
+
+	// for the addressRaw generation, we combine the addressDataEncode and the CRC32 checksum of it into a tagged(24) cbor again
+	const addressRaw = cbor.encode([new cbor.Tagged(24, addressDataEncoded), crc32(addressDataEncoded)]);
+
+	// final step is to just convert the addressRaw bytes into base58
+	try {
+		var byronAddress = CardanoWasm.ByronAddress.from_bytes(addressRaw).to_base58();
+	} catch (error) { throw(`Could not convert addressRaw into base58 format '${error}'`); }
+
+	return byronAddress; // like 'Ae2...'
+}
+
+
+function getByronDaedalusAddressPath(rootPubKeyHex, address) {
+	// This function extracts the used derivation path from Byron-Address in base58 format like "DDz..." derived via byron-style
+	// inputs:
+	// rootPubKeyHex - The extended public key of the root derivation from the mnemonics, 64 bytes (32 bytes public, 32 bytes chaincode)
+	// address - Daedalus style byron address in base58 format "DDz..."
+
+	// first we need to convert the base58 address to bytes(buffer)
+	try {
+		var addressRaw = CardanoWasm.ByronAddress.from_base58(address).to_bytes();
+	} catch (error) { throw(`Could not convert address from base58 to bytes '${error}'`); }
+
+	// decode the cbor and check that its the correct tag 24 and that the value is a buffer
+	try {
+		var addressDataTagged = cbor.decode(addressRaw)[0];
+	} catch (error) { throw(`Could not cbor decode the address bytes '${error}'`); }
+	if ( addressDataTagged.tag != 24 || ! Buffer.isBuffer(addressDataTagged.value ) ) { throw(`Tag in addressData is not 24 or addressData value is not a buffer'`); }
+
+	// decode the cbor of the value which is than the addressData
+	try {
+		var addressData = cbor.decode(addressDataTagged.value);
+	} catch (error) { throw(`Could not cbor decode the addressData in the address '${error}'`); }
+
+	// get the encrypted serialized path out of the addressData
+	const encryptedDerivationPathEncoded = addressData[1].get(1);
+	try {
+		var encryptedDerivationPath = cbor.decode(encryptedDerivationPathEncoded);
+	} catch (error) { throw(`Could not cbor decode the encryptedDerivationPath data '${error}'`); }
+
+	// now we need to decrypt the serialized derivation path, for that we need to generate the pass
+	// via pbkdf (algo=sha512, salt='address-hashing', rounds=500, length=32). that is than later used with the ChaCha20Poly1305 encryption
+	const rootPubKeyHDpass = crypto.pbkdf2Sync(Buffer.from(rootPubKeyHex,'hex'),'address-hashing',500,32,'sha512');
+	const nonce = Buffer.from('serokellfore','ascii'); //hardcoded
+	const key = Buffer.from(rootPubKeyHDpass);
+	const data = encryptedDerivationPath.subarray(0,12);
+	const tag = encryptedDerivationPath.subarray(12);
+	try {
+	    decipher = crypto.createDecipheriv('chacha20-poly1305', key, nonce, {
+	      authTagLength: 16
+	    }),
+	    decipher.setAuthTag(tag),
+	    decryptedDerivationPath = Buffer.concat([
+	      	decipher.update(data),
+		decipher.final()
+	    ])
+	} catch (error) { throw(`Could not decrypt the serialized derivation path '${error}'`); }
+
+	// decode the derivation path
+	try {
+		var serPath = cbor.decode(decryptedDerivationPath);
+	} catch (error) { throw(`Could not cbor decode the decryptedDerivationPath '${error}'`); }
+
+	// now add each index in the array
+	var derivationPath = '';
+	serPath.forEach( (element) => {
+		var numPath = Number(element) - 0x80000000; //value of element - hardened path 0x80000000 offset
+		if ( numPath < 0 ) { throw('Byron derivation path must only contain hardened elements'); }
+		derivationPath += `${numPath}H/`; //add the element as hardenend number
+	});
+	derivationPath = derivationPath.slice(0, -1); //get rid of the last '/'
+
+	return derivationPath; // like '0H/1H'
+}
+
+
+function readByronDaedalusAddress(addr) {
+	//reads a byron daedalus DDz... address from a file (containing the base58 address), a direct hex entry(addressRaw) or a base58-string
+	//inputs:
+	//	addr -> string that points to a file or direct data
+	//returns: byron daedalus bas58 address string (DDz...)
+
+	// first check, if the given address is an empty string, exit with an error
+	if ( trimString(addr) == '' ) { throw(`Error: The address value is empty`); }
+
+	var addr_base58 = ''; // empty
+
+	// try to use the parameter as a filename for a base58 encoded string in it
+	try {  // outer try is needed to check if the file is present in first place
+		var content = trimString(fs.readFileSync(addr,'utf8')); //read the content of the given addr from a file
+		try { // inner try to check if the content is a base58 address
+			var tmp = CardanoWasm.ByronAddress.from_base58(content);
+			var addr_base58 = content;
+		} catch (error) { throw(`The address in file '${addr}' is not a valid base58 byron daedalus address`); }
+	} catch (error) {}
+
+	// try to use the parameter as a base encoded string
+	if ( addr_base58 == '' ) {
+		try { // inner try to check if the content is a base58 address
+			var tmp = CardanoWasm.ByronAddress.from_base58(addr);
+			var addr_base58 = addr;
+		} catch (error) {}
+	}
+
+	// try to use the parameter as a direct hex string
+	if ( addr_base58 == '' ) {
+		addr = trimString(addr.toLowerCase());
+		//check that the given key is a hex string
+		if ( ! regExpHex.test(addr) ) { throw(`Provided address '${addr}' is not a valid base58 address, file or hex-string(addressRaw), or the file is missing`); }
+		try {
+			var addr_base58 = CardanoWasm.ByronAddress.from_bytes(Buffer.from(addr,'hex')).to_base58();
+		} catch (error) { throw(`Provided addressRaw hex string is not a valid byron daedalus address format '${error}'`); }
+	}
+
+	return addr_base58;
 }
 
 
@@ -1054,7 +1350,7 @@ async function main() {
         workMode = trimString(workMode.toLowerCase());
 
 	//check additional flags and add it to the workMode var
-	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor' ];
+	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor', 'byron', 'yoroi' ];
 	workmodeFlags.forEach( element => { args[element] ? workMode += `-${element}` : {} } );
 
 	//show usage for the workMode
@@ -1746,15 +2042,16 @@ async function main() {
 
                 case "keygen":  //KEY GENERATION
                 case "keygen-cip36":
-                case "keygen-ledger":
-                case "keygen-trezor":
+                case "keygen-ledger": // ledger hardware wallet
+                case "keygen-trezor": // trezor hardware wallet
+                case "keygen-byron": // daedalus style 12 words
+                case "keygen-yoroi": // yoroi stale 15 words
 
 			//setup
-			var XpubKeyHex = '', XpubKeyBech = '', vote_purpose = -1, drepIdHex = '', drepIdBech = ''; drepIdHexLegacy = '', drepIdBechLegacy = '';
+			var XpubKeyHex = '', XpubKeyBech = '', rootPubKeyHex = '', vote_purpose = -1, drepIdHex = '', drepIdBech = ''; drepIdHexLegacy = '', drepIdBechLegacy = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
-			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '';
-			var rootKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
-
+			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '', address = '';
+			var rootKeyHex = '', byronKeyHex = '', rootPubKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -1774,8 +2071,23 @@ async function main() {
 					case 'CALIDUS': derivation_path = '1852H/1815H/0H/0/0'; break;
 				}
 
+				//check the given derivation path. convert a ' into H and check the elements according to the workmode
 				if ( derivation_path.indexOf(`'`) > -1 ) { derivation_path = derivation_path.replace(/'/g,'H'); } //replace the ' char with a H char
-				if ( ! regExpPath.test(derivation_path) ) { console.error(`Error: The provided derivation --path '${derivation_path}' does not match the right format! Example: 1852H/1815H/0H/0/0`); process.exit(1); }
+				switch (workMode) {
+					case "keygen-byron": //check against byron daedalus path regex
+						if ( ! regExpPathByron.test(derivation_path) ) {
+							console.error(`Error: The provided derivation --path '${derivation_path}' for byron does not match the right format! Example: 0H/0H`); process.exit(1); }
+						break;
+					case "keygen-yoroi": //check against byron yoroi path regex
+						if ( ! regExpPathYoroi.test(derivation_path) ) {
+							console.error(`Error: The provided derivation --path '${derivation_path}' for byron yoroi does not match the right format! Must always start with 44H/1815H`); process.exit(1); }
+						break;
+					default: //check against normal path regex
+						if ( ! regExpPath.test(derivation_path) ) {
+							console.error(`Error: The provided derivation --path '${derivation_path}' does not match the right format! Example: 1852H/1815H/0H/0/0`); process.exit(1); }
+						break;
+				}
+
 			} else {
 				var derivation_path = ''; //no path provided, set the derivation_path variable to be empty
 				var derivation_path_arg = derivation_path
@@ -1806,12 +2118,37 @@ async function main() {
 					var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
 				} catch (error) { console.error(`Error: The provided mnemonics are not valid, please check the correct spelling. '${error}'`); process.exit(1); }
 
-				//set the derivation path to the default if not already set before -> users expect that if you provide mnemonics that they are used. otherwise a normal "underived" keypair would be created
-				if ( derivation_path == '' ) { derivation_path = '1852H/1815H/0H/0/0'; }
+				//set the derivation path to a default if not already set before -> users expect that if you provide mnemonics that they are used. otherwise a normal "underived" keypair would be created
+				if ( derivation_path == '' ) {
+					switch (workMode) {
+						case "keygen-byron": //byron daedalus default
+							derivation_path = '0H/0H'; break;
+						case "keygen-yoroi": //byron yoroi default
+							derivation_path = '44H/1815H/0H/0/0'; break;
+						default: //all other methods
+							derivation_path = '1852H/1815H/0H/0/0'; break;
+					}
+				}
 
-			} else { //no mnemonics provided, generate a random entropy and get the mnemonics from it
+			} else { //no mnemonics provided, generate a random entropy and get the mnemonics from it. for byron and yoroi, set the default derivation path 
 
-				var entropy = crypto.randomBytes(32); //new random entropy
+				switch (workMode) {
+					case "keygen-byron": //byron daedalus default
+						var entropy = crypto.randomBytes(16); //new random entropy 128 bits -> 12 words
+						if ( derivation_path == '' ) { derivation_path = '0H/0H'; }
+						break;
+					case "keygen-yoroi": //byron yoroi default
+						var entropy = crypto.randomBytes(20); //new random entropy 160 bits -> 15 words
+						if ( derivation_path == '' ) { derivation_path = '44H/1815H/0H/0/0'; }
+						break;
+					case "keygen-ledger":
+					case "keygen-trezor":
+						if ( derivation_path == '' ) { derivation_path = '1852H/1815H/0H/0/0'; }
+						var entropy = crypto.randomBytes(32); break; //new random entropy 256 bits -> 24 words
+						break;
+					default: //all other methods - dont set a default derivation_path
+						var entropy = crypto.randomBytes(32); break; //new random entropy 256 bits -> 24 words
+				}
 				var mnemonics = bip39.entropyToMnemonic(entropy); //get the mnemonics from the entropy
 				var mnemonicsWordCount = wordCount(mnemonics);
 
@@ -1867,12 +2204,58 @@ async function main() {
 												break;
 
 										default:	// there are only 12,15,18 or 24 words allowed with trezor, throw an error otherwise
+												var error = `only 12,15,18,24 words supported not ${mnemonicsWordCount}`;
 												console.error(`Error: Could not generate the rootKey for icarus/normal type from the entropy/mnemonic. '${error}'`); process.exit(1);
 												break;
 									}
 									break;
 
-						default:	// defaults to normal icarus (wallet) derivation method
+						case "keygen-byron": 	// generate a rootkey via byron daedalus derivation method
+									//console.log(`Generating rootkey from byron method.`);
+									switch (mnemonicsWordCount) {
+										case 12: //for 12 words DaedalusStyle
+												try {
+													var rootKeyByron = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateByronMasterKeyFromMnemonic(mnemonics));
+													var rootKeyHex = Buffer.from(rootKeyByron.as_bytes()).toString('hex');
+													var byronKeyHex = rootKeyHex;
+													var rootPubKeyHex = Buffer.from(rootKeyByron.to_public().as_bytes()).toString('hex'); //root public key in hex format, 64bytes)
+												} catch (error) { console.error(`Error: Could not generate the rootKey for byron daedalus style 12 words mnemonics. '${error}'`); process.exit(1); }
+												derivation_type = 'byron';
+
+												// if the user provides an address, read out the derivation path in the address and use it for the derivation instead of a given one
+									                        var address = args['address'];
+									                        if ( typeof address === 'string' ) {
+													try {
+														var daedalusAddr = readByronDaedalusAddress(address);
+														var derivation_path = getByronDaedalusAddressPath(rootPubKeyHex, daedalusAddr);
+													} catch (error) { console.error(`Error: Could not get derivation path from byron-address '${error}'`); process.exit(1); }
+												}
+												break;
+
+										default:	// there is only support for 12 words currently
+												var error = `only 12 words Byron Daedalus supported, not ${mnemonicsWordCount}`;
+												console.error(`Error: Could not generate the rootKey for byron-daedalus type from the entropy/mnemonic. '${error}'`); process.exit(1);
+												break;
+									}
+									break;
+
+						case "keygen-yoroi": 	// generate a rootkey via byron yoroi derivation method
+									//console.log(`Generating rootkey from byron method.`);
+									switch (mnemonicsWordCount) {
+										case 15: //for 15 words Yoroi-Style
+												try {
+													var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
+												} catch (error) { console.error(`Error: Could not generate the rootKey for byron yoroi style 15 words mnemonic. '${error}'`); process.exit(1); }
+												derivation_type = 'icarus';
+												break;
+										default:	// there is only support for 15 words currently
+												var error = `only 15 words Yoroi supported, not ${mnemonicsWordCount}`;
+												console.error(`Error: Could not generate the rootKey for byron-yoroi type from the entropy/mnemonic. '${error}'`); process.exit(1);
+												break;
+									}
+									break;
+
+						default:	// defaults to normal icarus/shelley (wallet) derivation method
 								try {
 									var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics)
 								} catch (error) { console.error(`Error: Could not generate the rootKey for icarus/normal type from the entropy/mnemonic. '${error}'`); process.exit(1); }
@@ -1881,8 +2264,9 @@ async function main() {
 					}
 
 				//store the rootKey in hex format for output later on
-				var rootKeyHex = Buffer.from(rootKey.as_bytes()).toString('hex');
+				if ( rootKeyHex == '' ) { rootKeyHex = Buffer.from(rootKey.as_bytes()).toString('hex'); }
 
+				//derive the child keys via the given path
 				var pathArray = derivation_path.split('/');
 				pathArray.forEach( (element, index) => {
 					var numPath = 0;
@@ -1892,33 +2276,91 @@ async function main() {
 						 element = element.slice(0,-1); //remove the last char 'H' so only a number is left
 					}
 					numPath += Number(element); //add+convert the element number
-					//derive the path
-					try {
-						rootKey = rootKey.derive(numPath);
-					} catch (error) { console.error(`Error: Could not derive the given path from the rootKey. '${error}'`); process.exit(1); }
 
-					//get the Xpublickey after the 3rd derived path (index=2)
-					if ( index == 2 ) {
-						XpubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //Xpublic key in hex format (64bytes)
-						XpubKeyBech = bech32.encode("Xpub", bech32.toWords(Buffer.from(XpubKeyHex, "hex")), 128);
+					//derive the path
+					switch (workMode) {
+						case "keygen-byron": //in byron daedalus mode, use the deriveByronDaedalus function and work with the hex string
+							try {
+								byronKeyHex = deriveByronDaedalus(byronKeyHex,numPath);
+							} catch (error) { console.error(`Error: Could not derive the given path from the rootKey in byron mode. '${error}'`); process.exit(1); }
+							break;
+						default: //for all other modes, derive via the .derive function of the already created rootKey
+							try {
+								rootKey = rootKey.derive(numPath);
+							} catch (error) { console.error(`Error: Could not derive the given path from the rootKey. '${error}'`); process.exit(1); }
+							//get the Xpublickey after the 3rd derived path (index=2)
+							if ( index == 2 ) {
+								XpubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //Xpublic key in hex format (64bytes)
+								XpubKeyBech = bech32.encode("Xpub", bech32.toWords(Buffer.from(XpubKeyHex, "hex")), 128);
+							}
+							break;
 					}
 				});
 
+				//after the derive generate the prvKeyHex(128bytes) & pubKeyHex(32 or 64bytes) & byronAddress
+				switch (workMode) {
+					case "keygen-byron":
+						try {
+							var rootKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(byronKeyHex.substring(0,128),'hex'));
+						} catch (error) { console.error(`Error: Could not load generated byron-private key ${error}`); process.exit(1); }
 
-				//if derived, we always have an extended private secret key
-				var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
-				//var prvKeyHex = Buffer.from(rootKey.to_raw_key().as_bytes()).toString('hex'); //private-secret key in hex format (64bytes) - not used here because its always an extended one
+						//get the extended public key
+						var pubKeyExtHex = `${Buffer.from(rootKey.to_public().as_bytes()).toString('hex')}${byronKeyHex.substring(128)}`;
 
-				//if the extra flag 'vkey-extended' is set, generate a 64byte public key. otherwise generate a 32byte public key
-				if ( args['vkey-extended'] === true ) {
-					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //public key in hex format (64bytes)
-				} else {
-					var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex').substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+						//private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+						var prvKeyHex = `${byronKeyHex.substring(0,128)}${pubKeyExtHex.substring(0,64)}${byronKeyHex.substring(128)}`;
+
+						//if the extra flag 'vkey-extended' is set, use the extended 64byte public key. otherwise only use the 32byte public key
+						if ( args['vkey-extended'] === true ) {
+							var pubKeyHex = pubKeyExtHex; //public key in hex format (32byte pub + 32byte chaincode)
+						} else {
+							var pubKeyHex = pubKeyExtHex.substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+						}
+
+						//generate the byron-daedalus-address
+						try {
+							var address = generateByronDaedalusAddress(rootPubKeyHex, pubKeyExtHex, derivation_path);
+						} catch (error) { console.error(`Error: Could not generated byron-address '${error}'`); process.exit(1); }
+						break;
+
+					case "keygen-yoroi":
+						//get the extended public key
+						var pubKeyExtHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex');
+
+						//if the extra flag 'vkey-extended' is set, use the extended 64byte public key. otherwise only use the 32byte public key
+						if ( args['vkey-extended'] === true ) {
+							var pubKeyHex = pubKeyExtHex; //public key in hex format (32byte pub + 32byte chaincode)
+						} else {
+							var pubKeyHex = pubKeyExtHex.substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+						}
+
+						//if derived, we always have an extended private secret key
+						var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+
+						//generate the byron-yoroi-address
+						try {
+							var address = generateByronYoroiAddress(pubKeyExtHex);
+						} catch (error) { console.error(`Error: Could not generated byron-address '${error}'`); process.exit(1); }
+
+						break;
+
+					default:
+						//if the extra flag 'vkey-extended' is set, generate a 64byte public key. otherwise generate a 32byte public key
+						if ( args['vkey-extended'] === true ) {
+							var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex'); //public key in hex format (64bytes)
+						} else {
+							var pubKeyHex = Buffer.from(rootKey.to_public().as_bytes()).toString('hex').substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+						}
+						//if derived, we always have an extended private secret key
+						var prvKeyHex = Buffer.from(rootKey.to_128_xprv()).toString('hex'); //private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+						break;
+
 				}
+
 
 			}
 
-			//generate the cbor representation of the private & public key
+			//generate the cbor representation of the private & public key for the skey/vkey file
 			var prvKeyCbor = cbor.encode(Buffer.from(prvKeyHex,'hex')).toString('hex')
 			var pubKeyCbor = cbor.encode(Buffer.from(pubKeyHex,'hex')).toString('hex')
 
@@ -1997,7 +2439,6 @@ async function main() {
 								var vkeyContent = `{ "type": "DRepVerificationKey_ed25519", "description": "Delegate Representative Verification Key", "cborHex": "${pubKeyCbor}" }`;
 								var pubKeyBech = bech32.encode("drep_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 							}
-
 							break;
 
 
@@ -2019,7 +2460,6 @@ async function main() {
 								var vkeyContent = `{ "type": "ConstitutionalCommitteeColdVerificationKey_ed25519", "description": "Constitutional Committee Cold Verification Key", "cborHex": "${pubKeyCbor}" }`;
 								var pubKeyBech = bech32.encode("cc_cold_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 							}
-
 							break;
 
 
@@ -2041,7 +2481,6 @@ async function main() {
 								var vkeyContent = `{ "type": "ConstitutionalCommitteeHotVerificationKey_ed25519", "description": "Constitutional Committee Hot Verification Key", "cborHex": "${pubKeyCbor}" }`;
 								var pubKeyBech = bech32.encode("cc_hot_vk", bech32.toWords(Buffer.from(pubKeyHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer publickey (64bytes)
 							}
-
 							break;
 
 
@@ -2103,6 +2542,11 @@ async function main() {
 
 			} //switch (derivation_path.substring(0,11))
 
+			//for byron, we generate byronstuff
+			if ( workMode == "keygen-byron" || workMode == "keygen-yoroi" ) {
+				var skeyContent = `{ "type": "PaymentSigningKeyByron_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+				var vkeyContent = `{ "type": "PaymentVerificationKeyByron_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+			}
 
 			//compose the content for the output as JSON, extended JSON data or plain hex
 			if ( args['json'] === true ) { //generate content in json format
@@ -2115,6 +2559,8 @@ async function main() {
 				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
 				if ( passphrase != '' ) { content += `, "passphrase": "${passphrase}"`; }
 				if ( rootKeyHex != '' ) { content += `, "rootKey": "${rootKeyHex}"`; }
+				if ( rootPubKeyHex != '' ) { content += `, "rootPublicKey": "${rootPubKeyHex}"`; }
+				if ( address != '' ) { content += `, "address": "${address}"`; }
 				content += `, "secretKey": "${prvKeyHex}", "publicKey": "${pubKeyHex}"`;
 				if ( XpubKeyHex != '' ) { content += `, "XpubKeyHex": "${XpubKeyHex}", "XpubKeyBech": "${XpubKeyBech}"`; }
 				if ( drepIdHex != '' ) { content += `, "drepIdHex": "${drepIdHex}", "drepIdBech": "${drepIdBech}", "drepIdHexLegacy": "${drepIdHexLegacy}", "drepIdBechLegacy": "${drepIdBechLegacy}"`; }
@@ -2175,6 +2621,16 @@ async function main() {
 			if ( typeof out_mnemonics === 'string' && out_mnemonics != '' && mnemonics != '' ) {
 				try {
 					fs.writeFileSync(out_mnemonics, `${mnemonics}\n`, 'utf8')
+					// file written successfully
+				} catch (error) { console.error(`${error}`); process.exit(1); }
+			}
+
+			//output an address file (.addr)
+			var out_addr = args['out-addr'];
+		        //if there is a --out-addr parameter specified and an address value generated, try to write the address into a file
+			if ( typeof out_addr === 'string' && out_addr != '' && address != '' ) {
+				try {
+					fs.writeFileSync(out_addr, `${address}\n`, 'utf8')
 					// file written successfully
 				} catch (error) { console.error(`${error}`); process.exit(1); }
 			}
