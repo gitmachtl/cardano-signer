@@ -1,6 +1,6 @@
 {
   "name": "cardano-signer",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "description": "cardano-signer signs a given data(hex/text/file) with a signing key(hex/bech/file) or verify the signature via a public key(hex/bech/file). it can also produce a cip-8/cip-30/cip-36/cip-88v2/cip-100/cip-151 conform payload signing/verification. can produce ed25519 keys from mnemonic for payment, staking, drep, constitutional commitee cold/hot keys, pool, calidus, etc...",
   "main": "cardano-signer.js",
   "scripts": {
@@ -18,7 +18,8 @@
     "crc": "^4.3.2",
     "fnv32": "^0.0.1",
     "jsonld": "^8.3.3",
-    "minimist": "^1.2.8"
+    "minimist": "^1.2.8",
+    "secp256k1": "^5.0.1"
   },
   "repository": {
     "type": "git",

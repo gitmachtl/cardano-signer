@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.29.0"
+const version = "1.30.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -14,6 +14,7 @@ const bip39 = require('bip39'); //used for mnemonics operations
 const crypto = require('crypto'); //used for crypto functions like entropy generation
 const jsonld = require('jsonld'); //used for canonizing json data (governance CIP-0100 metadata)
 const crc32 = require('crc').crc32; //currently only used for byron addressDataChecksum calculation
+const secp256k1 = require('secp256k1'); //required for bip39 child derivation (exodus)
 
 //set the options for the command-line arguments, so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
@@ -23,7 +24,7 @@ const parse_options = {
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
 
 	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
-		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'byron', 'yoroi', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
+		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
@@ -233,6 +234,7 @@ function showUsage(topic, exit = true){
 	case 'keygen-trezor':
 	case 'keygen-byron':
 	case 'keygen-yoroi':
+	case 'keygen-exodus':
 	        console.log(``)
 	        console.log(`${Bright}${Underscore}Generate Cardano ed25519/ed25519-extended keys:${Reset}`)
 	        console.log(``)
@@ -244,7 +246,8 @@ function showUsage(topic, exit = true){
 		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor |${Reset} 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
-		console.log(`            ${FgGreen}--byron | --yoroi${Reset}]					${Dim}optional flag to set the derivation type to "Daedalus(Byron)" or "Yoroi(Byron)"${Reset}`);
+		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron)" or "Yoroi(Byron)"${Reset}`);
+		console.log(`            ${FgGreen}--exodus | --exodus-stake${Reset}]				${Dim}optional flag to set the derivation type to "Exodus(Shelley)-Payment" or "Exodus(Shelley)-Stake"${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<base58>"]		${Dim}optional byron address (DDz...) in --byron mode to do an auto-derivation-path discovery${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
@@ -418,6 +421,7 @@ function readKey2hex(key,type,jsonSearchArray) { //reads a standard-cardano-skey
 
 }
 
+
 function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (containing a bech address), a direct hex entry or a bech-string  // returns a hexstring of the address + type + network
 
 	//inputs:
@@ -547,7 +551,7 @@ function getHash(content, digestLengthBytes = 32) { //hashes a given hex-string 
 }
 
 
-// Some cryptographic helper functions especially for ledger and trezor derivation method
+// Some cryptographic helper functions for ledger, trezor, daedalus-byron, yoroi-byron, exodus derivation method
 function generateIcarusMasterKey(entropy, passphrase) {
         const xprv = crypto.pbkdf2Sync(passphrase,entropy,4096,96,'sha512')
         xprv[0]  &= 0b1111_1000; // clear the lowest 3 bits
@@ -611,6 +615,8 @@ function deriveChecksumBits(entropyBuffer) {
         return bytesToBinary(Array.from(hash)).slice(0, CS);
 }
 
+
+// BYRON Stuff
 
 function generateByronMasterKeyFromMnemonic(mnemonic) {
 	//calculate an entropy from the given mnemonic words
@@ -896,6 +902,69 @@ function readByronDaedalusAddress(addr) {
 	}
 
 	return addr_base58;
+}
+
+
+// EXODUS Stuff
+
+function generateSeedFromBip39Mnemonic(mnemonic, passphrase = '') {
+	//Function to generate a seed from Bip39 mnemonics. Currently only used for EXODUS Key derivation
+	//inputs: mnemonic words (optional passphrase)
+	//output: seed as hex
+        const seed = crypto.pbkdf2Sync(mnemonic,"mnemonic" + passphrase,2048,64,'sha512').toString('hex');
+	return seed;
+}
+
+
+function generateBip32MasterKeyFromSeed(seed) {
+	//Function to generate a MasterKey in "Bitcoin" style from a seed. Currently only used for the EXODUS Key derivation
+	//inputs: seed from 'generateSeedFromBip39Mnemonic in hex, index'
+	const MASTER_SECRET = Buffer.from('Bitcoin seed', 'utf8')
+	const xprv = crypto.createHmac('sha512', MASTER_SECRET).update(Buffer.from(seed,'hex')).digest('hex');
+	return xprv;
+}
+
+
+function deriveBip32Child(prvKeyHex, index) {
+	//This functions derives a child private key in Bip32 method. Currently only used for the EXODUS Key derivation.
+	//inputs:
+	//prvKeyHex - The full private key in hex (64bytes private key + 32bytes chain code)
+	//index - UInt index number: hardened means index >= 0x80000000, soft means index < 0x8000000
+	//EXODUS Cardano-Derivation Path is always 44H/1815H/0H/0/0 !
+
+	//split the given prvKeyHex into the key and chain code part
+	const prvKeyBuffer = Buffer.from(prvKeyHex.substring(0,64),'hex'); // private key are the first 32 bytes (64 hex chars)
+	var chainCodeBuffer = Buffer.from(prvKeyHex.substring(64),'hex'); // chaincode is starting at pos 32 bytes (the last 32 bytes)
+
+	//generate a buffer filled with the index number
+	const indexBuffer = Buffer.alloc(4,0); // indexBuffer 4 bytes long to hold the serialized index number
+	indexBuffer.writeUInt32BE(index,0); // write the index number to the indexBuffer (BigEndian encoding)
+
+	//derived HARD or SOFT
+	if (index >= 0x80000000) { // HARDENED -> derive from the private key
+		var data = new Uint8Array([0x00, ...prvKeyBuffer, ...indexBuffer]);
+	} else { // SOFT -> derive from the public key
+		try {
+			const pubKeyBuffer = secp256k1.publicKeyCreate(prvKeyBuffer);
+			var data = new Uint8Array([...pubKeyBuffer, ...indexBuffer]);
+		} catch (error) { throw(`Could not get PublicKey for soft-derivation in Bip32Child mode '${error}'`); }
+	}
+
+        const cc = crypto.createHmac('sha512', chainCodeBuffer).update(data).digest();
+	const iL = cc.subarray(0,32); //iL = left part of the cc (for privatekey calculation)
+	const iR = cc.subarray(32); //iR = right part of the cc (new chaincode)
+
+	//generate the new private key via secp256k1, in case of an error do a recursion with index+1
+	try {
+		var keyBuffer = Buffer.from(secp256k1.privateKeyTweakAdd(prvKeyBuffer, iL))
+		// errors out if iL >= n or the (prvKeyBuffer + iL) === 0
+	} catch (err) {
+		// errored out, do a recursive call with index+1
+		var keyBuffer = Buffer.from(deriveBip32Child(prvKeyHex, index + 1));
+	}
+
+	//Return the derived privateKey+chainCode
+	return Buffer.concat([keyBuffer,iR]).toString('hex');
 }
 
 
@@ -1328,10 +1397,6 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 }
 
 
-
-
-
-
 // MAIN
 //
 //
@@ -1350,7 +1415,7 @@ async function main() {
         workMode = trimString(workMode.toLowerCase());
 
 	//check additional flags and add it to the workMode var
-	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor', 'byron', 'yoroi' ];
+	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake' ];
 	workmodeFlags.forEach( element => { args[element] ? workMode += `-${element}` : {} } );
 
 	//show usage for the workMode
@@ -2040,18 +2105,21 @@ async function main() {
 			break;
 
 
+
                 case "keygen":  //KEY GENERATION
                 case "keygen-cip36":
                 case "keygen-ledger": // ledger hardware wallet
                 case "keygen-trezor": // trezor hardware wallet
                 case "keygen-byron": // daedalus style 12 words
-                case "keygen-yoroi": // yoroi stale 15 words
+                case "keygen-yoroi": // yoroi style 15 words
+                case "keygen-exodus": // exodus style 12 words (payment base address)
+                case "keygen-exodus-stake": // exodus style 12 words (stake address)
 
 			//setup
 			var XpubKeyHex = '', XpubKeyBech = '', rootPubKeyHex = '', vote_purpose = -1, drepIdHex = '', drepIdBech = ''; drepIdHexLegacy = '', drepIdBechLegacy = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '', address = '';
-			var rootKeyHex = '', byronKeyHex = '', rootPubKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
+			var rootKeyHex = '', byronKeyHex = '', exodusKeyHex = '', rootPubKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -2081,6 +2149,11 @@ async function main() {
 					case "keygen-yoroi": //check against byron yoroi path regex
 						if ( ! regExpPathYoroi.test(derivation_path) ) {
 							console.error(`Error: The provided derivation --path '${derivation_path}' for byron yoroi does not match the right format! Must always start with 44H/1815H`); process.exit(1); }
+						break;
+					case "keygen-exodus": //check against exodus path
+					case "keygen-exodus-stake":
+						if ( derivation_path != "44H/1815H/0H/0/0" ) {
+							console.error(`Error: The provided derivation --path '${derivation_path}' for exodus does not match the needed format 44H/1815H/0H/0/0`); process.exit(1); }
 						break;
 					default: //check against normal path regex
 						if ( ! regExpPath.test(derivation_path) ) {
@@ -2125,6 +2198,9 @@ async function main() {
 							derivation_path = '0H/0H'; break;
 						case "keygen-yoroi": //byron yoroi default
 							derivation_path = '44H/1815H/0H/0/0'; break;
+						case "keygen-exodus": //exodus default
+						case "keygen-exodus-stake":
+							derivation_path = '44H/1815H/0H/0/0'; break;
 						default: //all other methods
 							derivation_path = '1852H/1815H/0H/0/0'; break;
 					}
@@ -2139,6 +2215,11 @@ async function main() {
 						break;
 					case "keygen-yoroi": //byron yoroi default
 						var entropy = crypto.randomBytes(20); //new random entropy 160 bits -> 15 words
+						if ( derivation_path == '' ) { derivation_path = '44H/1815H/0H/0/0'; }
+						break;
+					case "keygen-exodus": //exodus default
+					case "keygen-exodus-stake":
+						var entropy = crypto.randomBytes(16); //new random entropy 128 bits -> 12 words
 						if ( derivation_path == '' ) { derivation_path = '44H/1815H/0H/0/0'; }
 						break;
 					case "keygen-ledger":
@@ -2176,7 +2257,6 @@ async function main() {
 					switch (workMode) {
 
 						case "keygen-ledger": 	// generate a rootkey via ledger derivation method
-									//console.log(`Generating rootkey from ledger method`);
 									try {
 										var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(generateLedgerMasterKey(mnemonics, passphrase));
 									} catch (error) { console.error(`Error: Could not generate the rootKey for ledger type mnemonics. '${error}'`); process.exit(1); }
@@ -2184,7 +2264,6 @@ async function main() {
 									break;
 
 						case "keygen-trezor": 	// generate a rootkey via trezor derivation method
-									//console.log(`Generating rootkey from trezor method`);
 									switch (mnemonicsWordCount) {
 										case 12:
 										case 15:
@@ -2211,7 +2290,6 @@ async function main() {
 									break;
 
 						case "keygen-byron": 	// generate a rootkey via byron daedalus derivation method
-									//console.log(`Generating rootkey from byron method.`);
 									switch (mnemonicsWordCount) {
 										case 12: //for 12 words DaedalusStyle
 												try {
@@ -2240,7 +2318,6 @@ async function main() {
 									break;
 
 						case "keygen-yoroi": 	// generate a rootkey via byron yoroi derivation method
-									//console.log(`Generating rootkey from byron method.`);
 									switch (mnemonicsWordCount) {
 										case 15: //for 15 words Yoroi-Style
 												try {
@@ -2251,6 +2328,24 @@ async function main() {
 										default:	// there is only support for 15 words currently
 												var error = `only 15 words Yoroi supported, not ${mnemonicsWordCount}`;
 												console.error(`Error: Could not generate the rootKey for byron-yoroi type from the entropy/mnemonic. '${error}'`); process.exit(1);
+												break;
+									}
+									break;
+
+						case "keygen-exodus": 	// generate a rootkey via exodus method
+						case "keygen-exodus-stake":
+									switch (mnemonicsWordCount) {
+										case 12: //for 12 words ExodusStyle
+												try {
+													var rootKeyHex = generateBip32MasterKeyFromSeed(generateSeedFromBip39Mnemonic(mnemonics, passphrase));
+													var exodusKeyHex = rootKeyHex;
+												} catch (error) { console.error(`Error: Could not generate the rootKey for exodus style 12 words mnemonics. '${error}'`); process.exit(1); }
+												derivation_type = 'exodus';
+												break;
+
+										default:	// there is only support for 12 words currently
+												var error = `only 12 words Exodus supported, not ${mnemonicsWordCount}`;
+												console.error(`Error: Could not generate the rootKey for exodus type from the entropy/mnemonic. '${error}'`); process.exit(1);
 												break;
 									}
 									break;
@@ -2283,6 +2378,12 @@ async function main() {
 							try {
 								byronKeyHex = deriveByronDaedalus(byronKeyHex,numPath);
 							} catch (error) { console.error(`Error: Could not derive the given path from the rootKey in byron mode. '${error}'`); process.exit(1); }
+							break;
+						case "keygen-exodus": //in exodus mode, use the deriveBip32Child function and work with the hex string
+						case "keygen-exodus-stake":
+							try {
+								exodusKeyHex = deriveBip32Child(exodusKeyHex,numPath);
+							} catch (error) { console.error(`Error: Could not derive the given path from the rootKey in exodus mode. '${error}'`); process.exit(1); }
 							break;
 						default: //for all other modes, derive via the .derive function of the already created rootKey
 							try {
@@ -2341,7 +2442,49 @@ async function main() {
 						try {
 							var address = generateByronYoroiAddress(pubKeyExtHex);
 						} catch (error) { console.error(`Error: Could not generated byron-address '${error}'`); process.exit(1); }
+						break;
 
+					case "keygen-exodus":
+					case "keygen-exodus-stake":
+						//we are not finished yet with the derivation, because we have derived via bip32 up to this point
+						//now we have to use this privatekey as the seed for the "daedalus byron masterkey function". yes, its strange
+						var exodusKeyHex = Buffer.from(generateByronMasterKeyFromSeed(exodusKeyHex.substring(0,64),1)).toString('hex');
+
+						try {
+							var rootKey = CardanoWasm.PrivateKey.from_extended_bytes(Buffer.from(exodusKeyHex.substring(0,128),'hex'));
+						} catch (error) { console.error(`Error: Could not load generated exodus-private key ${error}`); process.exit(1); }
+
+						//get the public key
+						var pubKeyExtHex = `${Buffer.from(rootKey.to_public().as_bytes()).toString('hex')}${exodusKeyHex.substring(128)}`;
+
+						//private-secret key in hex format (64bytes private + 32bytes public + 32bytes chaincode)
+						var prvKeyHex = `${exodusKeyHex.substring(0,128)}${pubKeyExtHex.substring(0,64)}${exodusKeyHex.substring(128)}`;
+
+
+						//if the extra flag 'vkey-extended' is set, use the extended 64byte public key. otherwise only use the 32byte public key
+						if ( args['vkey-extended'] === true ) {
+							var pubKeyHex = pubKeyExtHex; //public key in hex format (32byte pub + 32byte chaincode)
+						} else {
+							var pubKeyHex = pubKeyExtHex.substring(0,64); //public key in hex format (cut it to a non-extended publickey, 32bytes)
+						}
+
+						//generate base or stake address for exodus mode
+						switch (workMode) {
+							case "keygen-exodus": //generate the exodus-address base-address -> they use the same private/public key for payment and stake part, so also the same public key (hash) twice
+								try {
+									const addressHashHex = `01${getHash(pubKeyExtHex.substring(0,64),28)}${getHash(pubKeyExtHex.substring(0,64),28)}`; // 0x01 prefix -> mainnet base payment address
+									var address = bech32.encode("addr", bech32.toWords(Buffer.from(addressHashHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash
+								} catch (error) { console.error(`Error: Could not generated exodus base-address '${error}'`); process.exit(1); }
+								break;
+
+							case "keygen-exodus-stake": //generate a staking address and later on also staking skey/vkey files
+								//generate the exodus-address stake-address -> they use the same private/public key for payment and stake part, so also the same public key (hash) twice
+								try {
+									const addressHashHex = `e1${getHash(pubKeyExtHex.substring(0,64),28)}`; // 0xe1 prefix -> mainnet stake address
+									var address = bech32.encode("stake", bech32.toWords(Buffer.from(addressHashHex, "hex")), 128); //encode in bech32 with a raised limit to 128 words because of the longer hash
+								} catch (error) { console.error(`Error: Could not generated exodus base-address '${error}'`); process.exit(1); }
+								break;
+						}
 						break;
 
 					default:
@@ -2542,10 +2685,29 @@ async function main() {
 
 			} //switch (derivation_path.substring(0,11))
 
-			//for byron, we generate byronstuff
-			if ( workMode == "keygen-byron" || workMode == "keygen-yoroi" ) {
-				var skeyContent = `{ "type": "PaymentSigningKeyByron_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
-				var vkeyContent = `{ "type": "PaymentVerificationKeyByron_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+			//extra stuff for keygen-byron/yoroi/exodus
+			switch (workMode) {
+				case "keygen-byron":
+				case "keygen-yoroi": //for byron, we generate byronstuff
+					var skeyContent = `{ "type": "PaymentSigningKeyByron_ed25519_bip32", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					var vkeyContent = `{ "type": "PaymentVerificationKeyByron_ed25519_bip32", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					break;
+				case "keygen-exodus":
+					var skeyContent = `{ "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32", "description": "Exodus Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					if ( args['vkey-extended'] === true ) {
+						var vkeyContent = `{ "type": "PaymentExtendedVerificationKeyShelley_ed25519_bip32", "description": "Exodus Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					} else {
+						var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Exodus Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					}
+					break;
+				case "keygen-exodus-stake":
+					var skeyContent = `{ "type": "StakeExtendedSigningKeyShelley_ed25519_bip32", "description": "Exodus Stake Signing Key", "cborHex": "${prvKeyCbor}" }`;
+					if ( args['vkey-extended'] === true ) {
+						var vkeyContent = `{ "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32", "description": "Exodus Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					} else {
+						var vkeyContent = `{ "type": "StakeVerificationKeyShelley_ed25519", "description": "Exodus Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					}
+					break;
 			}
 
 			//compose the content for the output as JSON, extended JSON data or plain hex
