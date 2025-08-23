@@ -1,5 +1,37 @@
 ## Release Notes / Change-Logs
 
+* **1.30.0**
+
+  #### Key-Generation: Exodus Wallet derivation method was added
+
+  -  Its now possible to generate **payment keys and address** from 12-Word Cardano EXODUS Wallet via the new `--exodus` flag
+  -  Its now possible to generate **staking keys and address** from 12-Word Cardano EXODUS Wallet via the new `--exodus-stake` flag
+
+
+* **1.29.0**
+
+  #### Key-Generation: Full Daedalus & Yoroi Byron Era Support
+
+  **This update brings full Byron-Era features to the `keygen` function.** You can now:
+
+  - Two new flag options `--byron` for daedalus-byron 12 word style, `--yoroi` for yoroi-byron 15 word style
+  - Generate the Root/Child Private- and Public-Keys from old 12 word Daedalus Byron mnemonics and a given Path like `0H/0H`
+  - Generate the Root/Child Private- and Public-Keys for old 15 word Yoroi Byron mnemonics and a given Path like `44H/1815H/0H/0/0`
+  - Generate the corresponding Byron-Addresses like ' DDz...'  and 'Ae2...'
+  - Write the generated Address to an Address-File via the new `--out-addr` output parameter
+
+  As the derivation path for Byron Daedalus wallets are totally random, this update also includes
+  - **Auto derivation-path decryption from a given Daedalus-Address.**
+
+
+* **1.27.0**
+
+   #### Critical Update - CIP100 Signing / Verification / Canonization
+
+   - Critical update to enforce "safeMode = true" for the jsonld canonization used in governance metadata. Operations like signing, verification or canonization will now fail with an error if there is data drop in the canonized body. Before the default was set to "false", which could have led to a wrong canonized body under certain circumstances with silently dropping the error.
+
+   - There is a new flag `--disable-safemode` to switch this jsonld mode off (not recommended)
+
 
 * **1.26.0**
 
