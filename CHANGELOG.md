@@ -1,5 +1,15 @@
 ## Release Notes / Change-Logs
 
+* **1.31.0**
+
+   #### Key-Generation: 27-word Daedalus Paper-Wallet Support
+   - This update adds support for the 27-word Daedalus PaperWallet Style Mnemonic. It allows users to generate there keys from it and to participate in the NIGHT token claim for example.
+   - Also, its allows users with a 27-word mnemonics to convert it into a regular 12-word byron daedalus mnemonic.
+
+   #### Other changes:
+   - Lifted the restriction for EXODUS cardano wallet derivation to allow all derivation paths, was locked down to the first standard one before.
+
+
 * **1.30.0**
 
   #### Key-Generation: Exodus Wallet derivation method was added
