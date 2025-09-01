@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.30.0"
+const version = "1.31.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -50,6 +50,7 @@ const regExpHexWith0x = /^(0x)?[0-9a-fA-F]+$/;	//matches a hex-string with an op
 const regExpPath = /^[0-9]+H\/[0-9]+H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first three elements must always be hardened, max. 5 elements
 const regExpPathByron = /^[0-9]+H\/[0-9]+H(\/[0-9]+H){0,3}$/;  //path: first two elements must be hardened, than its open, max. 5 elements
 const regExpPathYoroi = /^44H\/1815H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first two elements must always be 44H/1815H, max. 5 elements
+const regExpPathExodus = /^44H\/1815H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first two elements must always be 44H/1815H, max. 5 elements
 const regExpIntNumber = /^-?[0-9]+$/; 		//matches positive and optional negative integer numbers
 
 //catch all exceptions that are not catched via try
@@ -246,7 +247,7 @@ function showUsage(topic, exit = true){
 		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor |${Reset} 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
-		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron)" or "Yoroi(Byron)"${Reset}`);
+		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron 12 & 27 words)" or "Yoroi(Byron 15 words)"${Reset}`);
 		console.log(`            ${FgGreen}--exodus | --exodus-stake${Reset}]				${Dim}optional flag to set the derivation type to "Exodus(Shelley)-Payment" or "Exodus(Shelley)-Stake"${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<base58>"]		${Dim}optional byron address (DDz...) in --byron mode to do an auto-derivation-path discovery${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
@@ -903,6 +904,47 @@ function readByronDaedalusAddress(addr) {
 
 	return addr_base58;
 }
+
+
+function unscrambleDaedalusPaperWalletMnemonic(mnemonic, password = '') {
+	//Function to unscramble the 27 word daedalus byron paper wallet mnemonic into normal 12 word byron daedalus ones
+	//inputs: 27 mnemonic words (optional password)
+	//output: 12 mnemonic words
+
+	//trim and lowercase the given mnemonic
+	var mnemonic = trimMnemonic(mnemonic.toLowerCase());
+
+	//check about 27 words
+	if ( wordCount(mnemonic) != 27 ) { throw(`Please provide a 27 word daedalus byron paper-wallet mnemonic!`); }
+
+	//split the 27 words into two parts: First part with 18 words -> scrambledMnemonic, Secord part with 9 words -> passphraseMnemonic
+	const mnemonicArray = mnemonic.split(' ');
+	const scrambledMnemonic = mnemonicArray.slice(0, 18).join(' '); //18 words
+	const passphraseMnemonic = mnemonicArray.slice(18, 27).join(' '); //9 words
+
+	//generate the passphrase from the passphraseMnemonic (optional protected via password)
+	const salt = `mnemonic${password}`;
+	const passphraseHex = crypto.pbkdf2Sync(Buffer.from(passphraseMnemonic,'utf8'),Buffer.from(salt,'utf8'),2048,32,'sha512').toString('hex');
+
+	//unscramble the scrambledMnemonic
+	const saltLen = 8;
+	try {
+		var scrambledEntropy = Buffer.from(bip39.mnemonicToEntropy(scrambledMnemonic),'hex');
+	} catch (error) { throw(`The scrambled mnemonic part (first 18 words) is not a valid one '${error}'`); }
+	if (saltLen >= scrambledEntropy.length) { throw('scrambled entropy is too short, must be larger then ${saltLen} bytes.'); }
+
+	//generate the unscrambledOutput
+	const outLen = scrambledEntropy.length - saltLen;
+	const outBuffer = crypto.pbkdf2Sync(passphraseHex,scrambledEntropy.slice(0,saltLen),10000,outLen,'sha512');
+	//now modify the outBuffer with values from the scrambledEntropy buffer
+	outBuffer.forEach( (element, index) => { outBuffer[index] = outBuffer[index] ^ scrambledEntropy[saltLen + index] });
+
+	//and use it as the new entropy to generate 12 word byron daedalus mnemonic
+	const unscrambledMnemonic = bip39.entropyToMnemonic(outBuffer);
+	return unscrambledMnemonic;
+}
+
+
 
 
 // EXODUS Stuff
@@ -2120,6 +2162,7 @@ async function main() {
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
 			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '', address = '';
 			var rootKeyHex = '', byronKeyHex = '', exodusKeyHex = '', rootPubKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
+			var paperWalletMnemonics = ''; //holder for the given 27 word daedalus byron paper-wallet mnemonic
 
 			//get the path parameter, if ok set the derivation_path variable
 			var derivation_path = args['path'];
@@ -2148,12 +2191,12 @@ async function main() {
 						break;
 					case "keygen-yoroi": //check against byron yoroi path regex
 						if ( ! regExpPathYoroi.test(derivation_path) ) {
-							console.error(`Error: The provided derivation --path '${derivation_path}' for byron yoroi does not match the right format! Must always start with 44H/1815H`); process.exit(1); }
+							console.error(`Error: The provided derivation --path '${derivation_path}' for byron yoroi does not match the right format! Must always start with 44H/1815H/...`); process.exit(1); }
 						break;
 					case "keygen-exodus": //check against exodus path
 					case "keygen-exodus-stake":
-						if ( derivation_path != "44H/1815H/0H/0/0" ) {
-							console.error(`Error: The provided derivation --path '${derivation_path}' for exodus does not match the needed format 44H/1815H/0H/0/0`); process.exit(1); }
+						if ( ! regExpPathExodus.test(derivation_path) ) {
+							console.error(`Error: The provided derivation --path '${derivation_path}' for exodus does not match the needed format 44H/1815H/...`); process.exit(1); }
 						break;
 					default: //check against normal path regex
 						if ( ! regExpPath.test(derivation_path) ) {
@@ -2169,6 +2212,9 @@ async function main() {
 			//load or overwrite derivation path if CIP36 vote keys are selected
 			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0' }
 
+			//check about a given extra passphrase
+			var passphrase = args['passphrase'];
+		        if ( typeof passphrase !== 'string' ) { passphrase = '' };
 
 			//get mnemonics parameter, if ok set the mnemonics variable
 			var mnemonics = args['mnemonics'];
@@ -2178,18 +2224,28 @@ async function main() {
 				try {
 					mnemonics = trimMnemonic(fs.readFileSync(mnemonics,'utf8').toLowerCase()); //read the mnemonics out of the file, convert to lower-case, trim it
 					var mnemonicsWordCount = wordCount(mnemonics);
-					if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: The given mnemonics-file does not contain between 12 and 24 words.`); process.exit(1); }
+					if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 27 ) { console.error(`Error: The given mnemonics-file does not contain between 12 and 27 words.`); process.exit(1); }
 				} catch (error) {
 						// no file found, so use it as regular given mnemonics
 						mnemonics = trimMnemonic(mnemonics.toLowerCase());
 						var mnemonicsWordCount = wordCount(mnemonics);
-						if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 24 ) { console.error(`Error: Please provide between 12 and 24 words for the --mnemonics.`); process.exit(1); }
+						if ( mnemonicsWordCount < 12 || mnemonicsWordCount > 27 ) { console.error(`Error: Please provide between 12 and 27 words for the --mnemonics.`); process.exit(1); }
 						}
 
-				//calculate the entropy of the given mnemonic
-				try {
-					var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
-				} catch (error) { console.error(`Error: The provided mnemonics are not valid, please check the correct spelling. '${error}'`); process.exit(1); }
+				// for a daedalus byron 27 word paper-wallet mnemonic, unscramble the mnemonic first to regular 12 word daedalus byron mnemonics. otherwise calc the entropy of the mnemonics
+				if ( mnemonicsWordCount == 27 ) {
+					try {
+						var paperWalletMnemonics = mnemonics; //save the given paper-wallet scrambled mnemonics for the output later on
+						var mnemonics = unscrambleDaedalusPaperWalletMnemonic(mnemonics, passphrase); //set the unscrambled 12 word mnemonics as the new mnemonics for byron daedalus
+						mnemonicsWordCount = wordCount(mnemonics); //should be 12 words now
+						if (mnemonicsWordCount != 12) { throw(`Unscrambled Mnemonics are ${mnemonicsWordCount} words and not 12 words!?`); }
+					} catch (error) { console.error(`Error: Could not unscrable the given 27 word paper-wallet mnemonics. '${error}'`); process.exit(1); }
+				} else {
+					//calculate the entropy of the given mnemonic
+					try {
+						var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
+					} catch (error) { console.error(`Error: The provided mnemonics are not valid, please check the correct spelling. '${error}'`); process.exit(1); }
+				}
 
 				//set the derivation path to a default if not already set before -> users expect that if you provide mnemonics that they are used. otherwise a normal "underived" keypair would be created
 				if ( derivation_path == '' ) {
@@ -2230,14 +2286,11 @@ async function main() {
 					default: //all other methods - dont set a default derivation_path
 						var entropy = crypto.randomBytes(32); break; //new random entropy 256 bits -> 24 words
 				}
+
 				var mnemonics = bip39.entropyToMnemonic(entropy); //get the mnemonics from the entropy
 				var mnemonicsWordCount = wordCount(mnemonics);
-
+console.log(mnemonics);
 			}
-
-			//check about a given extra passphrase
-			var passphrase = args['passphrase'];
-		        if ( typeof passphrase !== 'string' ) { passphrase = '' };
 
 			//if there is no derivation_path set, than a simple normal ed25519 key (not derived) is requested
 			if ( derivation_path == '' ) { //generate a simple ed25519 keypair
@@ -2324,6 +2377,9 @@ async function main() {
 													var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
 												} catch (error) { console.error(`Error: Could not generate the rootKey for byron yoroi style 15 words mnemonic. '${error}'`); process.exit(1); }
 												derivation_type = 'icarus';
+												break;
+										case 21: //for 21 words PaperWallet-Yoroi-Style
+												console.error(`21 Words Yoroi-PaperWallet is not supported yet, sorry.`); process.exit(1);
 												break;
 										default:	// there is only support for 15 words currently
 												var error = `only 15 words Yoroi supported, not ${mnemonicsWordCount}`;
@@ -2718,6 +2774,7 @@ async function main() {
 				if ( derivation_path != '' ) { content += `, "derivationPath": "${derivation_path}"`; }
 				if ( derivation_type != '' ) { content += `, "derivationType": "${derivation_type}"`; }
 				if ( vote_purpose > -1 ) { content += `, "votePurpose": "${vote_purpose_description} (${vote_purpose})"`; }
+				if ( paperWalletMnemonics != '' ) { content += `, "paperWalletMnemonics": "${paperWalletMnemonics}"`; } //the original 27 words for a daedalus byron paper-wallet
 				if ( mnemonics != '' ) { content += `, "mnemonics": "${mnemonics}"`; }
 				if ( passphrase != '' ) { content += `, "passphrase": "${passphrase}"`; }
 				if ( rootKeyHex != '' ) { content += `, "rootKey": "${rootKeyHex}"`; }
