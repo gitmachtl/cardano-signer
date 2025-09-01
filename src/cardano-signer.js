@@ -2289,7 +2289,7 @@ async function main() {
 
 				var mnemonics = bip39.entropyToMnemonic(entropy); //get the mnemonics from the entropy
 				var mnemonicsWordCount = wordCount(mnemonics);
-console.log(mnemonics);
+
 			}
 
 			//if there is no derivation_path set, than a simple normal ed25519 key (not derived) is requested
