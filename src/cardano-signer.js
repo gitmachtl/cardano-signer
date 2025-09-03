@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.31.0"
+const version = "1.32.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -15,6 +15,7 @@ const crypto = require('crypto'); //used for crypto functions like entropy gener
 const jsonld = require('jsonld'); //used for canonizing json data (governance CIP-0100 metadata)
 const crc32 = require('crc').crc32; //currently only used for byron addressDataChecksum calculation
 const secp256k1 = require('secp256k1'); //required for bip39 child derivation (exodus)
+const CardanoWallet = require('cardano-wallet'); //only used for the yoroi paperwallet unscrambling for now, trying to remove this dependency later on
 
 //set the options for the command-line arguments, so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
@@ -247,7 +248,7 @@ function showUsage(topic, exit = true){
 		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
 		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor |${Reset} 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
-		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron 12 & 27 words)" or "Yoroi(Byron 15 words)"${Reset}`);
+		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron 12/27 words)" or "Yoroi(Byron 15/21 words)"${Reset}`);
 		console.log(`            ${FgGreen}--exodus | --exodus-stake${Reset}]				${Dim}optional flag to set the derivation type to "Exodus(Shelley)-Payment" or "Exodus(Shelley)-Stake"${Reset}`);
 		console.log(`           [${FgGreen}--address${Reset} "<path_to_file>|<hex>|<base58>"]		${Dim}optional byron address (DDz...) in --byron mode to do an auto-derivation-path discovery${Reset}`);
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
@@ -553,7 +554,7 @@ function getHash(content, digestLengthBytes = 32) { //hashes a given hex-string 
 
 
 // Some cryptographic helper functions for ledger, trezor, daedalus-byron, yoroi-byron, exodus derivation method
-function generateIcarusMasterKey(entropy, passphrase) {
+function generateIcarusMasterKey(entropy, passphrase = '') {
         const xprv = crypto.pbkdf2Sync(passphrase,entropy,4096,96,'sha512')
         xprv[0]  &= 0b1111_1000; // clear the lowest 3 bits
         xprv[31] &= 0b0001_1111; // clear the highest 3 bits  (actually its 'clear the highest bit, clear the 3rd highest bit. but as we also set the 2nd highest bit, we can do it all at once)
@@ -772,13 +773,18 @@ function generateByronDaedalusAddress(rootPubKeyHex, pubKeyExtHex, derivationPat
 }
 
 
-function generateByronYoroiAddress(pubKeyExtHex) {
+function generateByronYoroiAddress(pubKeyExtHex, networkID = '') {
 	// This function generates a Byron-Address in base58 format like "Ae2..." for 15 word Icarus-Derivation Yoroi Mnemonics
 	// inputs:
 	// pubKeyExtHex - The extended public key of the derived child/address, 64 bytes (32 bytes public, 32 bytes chaincode)
+	// optional networkID - Leave it empty for Mainnet, set it to 1 for PreProd
 
-	// address attributes generation, this is an empty Map for Yoroi style byron addresses
-	const addressAttributes = new Map();
+	// address attributes generation, this is an empty Map for Yoroi style byron mainnet addresses. or it holds key 2 with a buffer of the networkID
+	if ( networkID != '' && typeof networkID === 'number' ) {
+		var addressAttributes = new Map().set(2,Buffer.from(new Uint8Array([networkID])));
+	} else {
+		var addressAttributes = new Map();
+	}
 
 	// now lets generate the addressRootHash. thats the addressRoot which is than hashed with sha3-256 and blake2b-224
 	const addressRoot = cbor.encode([0,[0,Buffer.from(pubKeyExtHex,'hex')],addressAttributes]);
@@ -944,6 +950,32 @@ function unscrambleDaedalusPaperWalletMnemonic(mnemonic, password = '') {
 	return unscrambledMnemonic;
 }
 
+
+function unscrambleYoroiPaperWalletMnemonic(mnemonic, password = '') {
+        //Function to unscramble the 21 word daedalus byron paper wallet mnemonic into normal 15 word byron yoroi ones
+        //inputs: 21 mnemonic words (optional password)
+        //output: 15 mnemonic words
+
+        //trim and lowercase the given mnemonic
+        var mnemonic = trimMnemonic(mnemonic.toLowerCase());
+
+        //check about 21 words
+        if ( wordCount(mnemonic) != 21 ) { throw(`Please provide a 21 word yoroi byron paper-wallet mnemonic!`); }
+
+	//calc the mnemonic from the given 21 words
+	try {
+		var scrambledEntropy = Buffer.from(bip39.mnemonicToEntropy(mnemonic),'hex');
+	} catch (error) { throw(`The provided 21 words are not valid ones '${error}'`); }
+
+	//unscramble the scrambledEntropy into normal entropy with the help of the cardano-wallet lib
+	try {
+		var unscrambledEntropy = CardanoWallet.paper_wallet_unscramble(scrambledEntropy, password);
+	} catch (error) { throw(`Could not unscramble via cardano-wallet lib '${error}'`); }
+
+	//convert the entropy back into BIP39 words
+	const unscrambledMnemonic = unscrambledEntropy.to_english_mnemonics();
+	return unscrambledMnemonic;
+}
 
 
 
@@ -2240,6 +2272,15 @@ async function main() {
 						mnemonicsWordCount = wordCount(mnemonics); //should be 12 words now
 						if (mnemonicsWordCount != 12) { throw(`Unscrambled Mnemonics are ${mnemonicsWordCount} words and not 12 words!?`); }
 					} catch (error) { console.error(`Error: Could not unscrable the given 27 word paper-wallet mnemonics. '${error}'`); process.exit(1); }
+
+				} else if ( mnemonicsWordCount == 21 && workMode == "keygen-yoroi" ) {
+					try {
+						var paperWalletMnemonics = mnemonics; //save the given paper-wallet scrambled mnemonics for the output later on
+						var mnemonics = unscrambleYoroiPaperWalletMnemonic(mnemonics, passphrase); //set the unscrambled 18 word mnemonics as the new mnemonics for byron yoroi
+						mnemonicsWordCount = wordCount(mnemonics); //should be 18 words now
+						if (mnemonicsWordCount != 15) { throw(`Unscrambled Mnemonics are ${mnemonicsWordCount} words and not 15 words!?`); }
+						var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
+					} catch (error) { console.error(`Error: Could not unscrable the given 21 word yoroi paper-wallet mnemonics. '${error}'`); process.exit(1); }
 				} else {
 					//calculate the entropy of the given mnemonic
 					try {
@@ -2374,15 +2415,16 @@ async function main() {
 									switch (mnemonicsWordCount) {
 										case 15: //for 15 words Yoroi-Style
 												try {
-													var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
+													if ( paperWalletMnemonics == '' ) { //in case the given mnemonic was generated from a 21 word yoroi paper wallet, don't use the passphrase again
+														var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
+													} else {
+														var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy));
+													}
 												} catch (error) { console.error(`Error: Could not generate the rootKey for byron yoroi style 15 words mnemonic. '${error}'`); process.exit(1); }
 												derivation_type = 'icarus';
 												break;
-										case 21: //for 21 words PaperWallet-Yoroi-Style
-												console.error(`21 Words Yoroi-PaperWallet is not supported yet, sorry.`); process.exit(1);
-												break;
 										default:	// there is only support for 15 words currently
-												var error = `only 15 words Yoroi supported, not ${mnemonicsWordCount}`;
+												var error = `only 15/21 words Yoroi supported, not ${mnemonicsWordCount}`;
 												console.error(`Error: Could not generate the rootKey for byron-yoroi type from the entropy/mnemonic. '${error}'`); process.exit(1);
 												break;
 									}
@@ -2496,7 +2538,7 @@ async function main() {
 
 						//generate the byron-yoroi-address
 						try {
-							var address = generateByronYoroiAddress(pubKeyExtHex);
+							var address = generateByronYoroiAddress(pubKeyExtHex); //you can call generateByronYoroiAddress(pubKeyExtHex, 1) to get a PreProd Address f.e.
 						} catch (error) { console.error(`Error: Could not generated byron-address '${error}'`); process.exit(1); }
 						break;
 
@@ -3489,6 +3531,7 @@ async function main() {
 	} //switch
 
 }
+
 
 //main();
 main().catch( (err) => {process.exit(1);} );
