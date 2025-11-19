@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.32.0"
+const version = "1.33.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -22,7 +22,7 @@ const parse_options = {
 
 	string:	['secret-key', 'public-key', 'signature', 'address', 'rewards-address', 'payment-address', 'vote-public-key',
 		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics', 'out-addr',
-		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet-magic', 'mainnet', 'author-name', 'passphrase'],
+		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet', 'mainnet', 'author-name', 'passphrase'],
 
 	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
 		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
@@ -30,7 +30,7 @@ const parse_options = {
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
 	alias: { 'deregister': 'deregistration', 'cip36': 'cip-36', 'cip8': 'cip-8', 'cip30': 'cip-30', 'cip100': 'cip-100',
 		 'secret-key': 'signing-key', 'public-key': 'verification-key', 'rewards-address': 'reward-address',
-		 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code' },
+		 'data': 'data-text', 'jcli' : 'bech', 'mnemonic': 'mnemonics', 'vkey-extended': 'with-chain-code', 'testnet': 'testnet-magic' },
 
 	unknown: function(unknownParameter) {
 			const numberParams = ['nonce', 'vote-weight', 'vote-purpose']; //these are parameters which defines numbers, so they are not in the lists above, we only throw an error if the unknownParameter is not in this list
@@ -100,7 +100,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--nohashcheck${Reset}]					${Dim}optional flag to not perform a check that the public-key belongs to the address/hash${Reset}`);
 		console.log(`           [${FgGreen}--hashed${Reset}]						${Dim}optional flag to hash the payload given via the 'data' parameters${Reset}`);
 		console.log(`           [${FgGreen}--nopayload${Reset}]					${Dim}optional flag to exclude the payload from the COSE_Sign1 signature, default: included${Reset}`);
-		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
+		console.log(`           [${FgGreen}--testnet${Reset}]						${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--include-maps${Reset}]					${Dim}optional flag to include the COSE maps in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--signature-only${Reset}]					${Dim}optional flag to only output the COSE_Sign1 in std-output without the COSE_Key${Reset}`);
@@ -123,7 +123,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional parameter (unsigned int), default: 0 (catalyst)${Reset}`);
 		console.log(`           [${FgGreen}--deregister${Reset}]					${Dim}optional flag to generate a deregistration (no --vote-public-key/--vote-weight/--payment-address needed${Reset}`);
-		console.log(`           [${FgGreen}--testnet-magic [xxx]${Reset}]				${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
+		console.log(`           [${FgGreen}--testnet${Reset}]						${Dim}optional flag to switch the address check to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--include-secret${Reset}]					${Dim}optional flag to include the secret/signing key in the json-extended output${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format, default: cborHex(text)${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
@@ -246,7 +246,7 @@ function showUsage(topic, exit = true){
 		console.log(`								${Dim}                     --path cc-hot, --path pool, --path calidus${Reset}`);
 		console.log(`           [${FgGreen}--mnemonics${Reset} "word1 word2 ... word24" 		${Dim}optional mnemonic words to derive the key from (separate via space)${Reset}`);
 		console.log(`            ${FgGreen}--mnemonics${Reset} <path_to_mnemonics_file>]		${Dim}optional mnemonic words provided via a text-file${Reset}`);
-		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase for --ledger or --trezor derivation method${Reset}`);
+		console.log(`           [${FgGreen}--passphrase${Reset} "passphrase"] 				${Dim}optional passphrase to be used for the derivation${Reset}`);
 		console.log(`           [${FgGreen}--ledger | --trezor |${Reset} 				${Dim}optional flag to set the derivation type to "Ledger" or "Trezor" hardware wallet${Reset}`);
 		console.log(`            ${FgGreen}--byron | --yoroi |${Reset}					${Dim}optional flag to set the derivation type to "Daedalus(Byron 12/27 words)" or "Yoroi(Byron 15/21 words)"${Reset}`);
 		console.log(`            ${FgGreen}--exodus | --exodus-stake${Reset}]				${Dim}optional flag to set the derivation type to "Exodus(Shelley)-Payment" or "Exodus(Shelley)-Stake"${Reset}`);
@@ -254,6 +254,7 @@ function showUsage(topic, exit = true){
 		console.log(`           [${FgGreen}--cip36${Reset}] 						${Dim}optional flag to generate CIP36 conform vote keys (also using path 1694H/1815H/0H/0/0)${Reset}`);
 		console.log(`           [${FgGreen}--vote-purpose${Reset} <unsigned_int>]			${Dim}optional vote-purpose (unsigned int) together with --cip36 flag, default: 0 (Catalyst)${Reset}`);
 		console.log(`           [${FgGreen}--vkey-extended${Reset}] 					${Dim}optional flag to generate a 64byte publicKey with chain code${Reset}`);
+		console.log(`           [${FgGreen}--testnet${Reset}]						${Dim}optional flag to switch the address generation to testnet-addresses, default: mainnet${Reset}`);
 		console.log(`           [${FgGreen}--json${Reset} |${FgGreen} --json-extended${Reset}]				${Dim}optional flag to generate output in json/json-extended format${Reset}`);
 		console.log(`           [${FgGreen}--out-file${Reset} "<path_to_file>"]			${Dim}path to an output file, default: standard-output${Reset}`);
 		console.log(`           [${FgGreen}--out-skey${Reset} "<path_to_skey_file>"]			${Dim}path to an output skey-file (writes out a typical *.skey json)${Reset}`);
@@ -542,6 +543,65 @@ function readAddr2hex(addr, publicKey) { //reads a cardano address from a file (
 		'type': addr_type,
 		'network': addr_network,
 		'matchPubKey': addr_matchPubKey
+	}
+
+}
+
+
+function generateShelleyAddress(publicKeyHex = '', addr_type = '', addr_network = 'mainnet') { //reads a publicKeyHex string and converts it into a shelley cardano address
+	//This function generates a Shelley-Address in bech32 format like "addr1..., addr_test1..., stake1..." from the given publicKey in hex format
+	//inputs:
+	//	publicKey -> a hex encoded publicKey
+	//	addr_type -> one of the major address type like "payment enterprise", "stake" ...
+	//	addr_network -> defaults to mainnet, otherwise set it to "testnet"
+
+	//returns:
+	//	object with .hex -> hex address string
+	//	            .bech -> bech encoded address string
+
+	var addr_hex = ''; // hex address format is <type-upper-nibble><network-lower-nibble><hash-of-pubkey>
+	var addr_bech = '';
+	var addr_prefix = 'addr'; //default prefix
+	var addr_hashlen = 28; //default len 28 bytes / 224 bits
+
+	// check the given publicKeyHex about validity
+	publicKeyHex = trimString(publicKeyHex.toLowerCase());
+	if ( ! regExpHex.test(publicKeyHex) || ! publicKeyHex.length == 64 || ! publicKeyHex.length == 128 ) { console.error(`Error: Provide a publicKey in hex-format 32 or 64 bytes long!`); process.exit(1); }
+	publicKeyHex = publicKeyHex.substring(0,64); // we only use the first 32 bytes
+
+	// set the type
+	switch (trimString(addr_type.toLowerCase())) {
+		case 'payment base': 		addr_hex += '0'; break;
+		case 'script base': 		addr_hex += '1'; break;
+		case 'payment script':		addr_hex += '2'; break;
+		case 'script script':		addr_hex += '3'; break;
+		case 'payment pointer':		addr_hex += '4'; break;
+		case 'script pointer':		addr_hex += '5'; break;
+		case 'payment enterprise':	addr_hex += '6'; break;
+		case 'script':			addr_hex += '7'; addr_prefix = 'script'; break;
+		case 'stake':			addr_hex += 'e'; addr_prefix = 'stake'; break;
+		case 'stake script':		addr_hex += 'f'; addr_prefix = 'stake'; break;
+		default: console.error(`Error: Please provide a valid address type!`); process.exit(1);
+	}
+
+	// set the network
+	switch (trimString(addr_network.toLowerCase())) {
+		case 'mainnet':	addr_hex += '1'; break;
+		case 'testnet':	addr_hex += '0'; addr_prefix += '_test'; break;
+		default: console.error(`Error: Please provide a valid address network 'mainner' or 'testnet' !`); process.exit(1);
+	}
+
+	// add the hash of the publicKey
+	addr_hex += getHash(publicKeyHex, addr_hashlen)
+
+	// bech encode the hex address
+	try {
+		addr_bech = bech32.encode(addr_prefix, bech32.toWords(Buffer.from(addr_hex, "hex")), 128); //encode in bech32
+	} catch (error) { console.error(`Error: Could not bech encode the address hex '${addr_hex}' with set prefix '${addr_prefix}' !`); process.exit(1); }
+
+	return {
+		'hex': addr_hex,
+		'bech': addr_bech
 	}
 
 }
@@ -1330,10 +1390,10 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 		        sign_addr = readAddr2hex(address, pubKey);
 
 			//check that the given address belongs to the current network
-			if ( ( sign_addr.network == 'mainnet' ) && !(typeof sub_args['testnet-magic'] === 'undefined') ) { // check for mainnet address
-				throw {'msg': `The mainnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current '--testnet-magic xxx' setting.`}; }
-			else if ( ( sign_addr.network == 'testnet' ) && (typeof sub_args['testnet-magic'] === 'undefined') ) { // check for testnet address
-				throw {'msg': `The testnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`}; }
+			if ( ( sign_addr.network == 'mainnet' ) && !(typeof sub_args['testnet'] === 'undefined') ) { // check for mainnet address
+				throw {'msg': `The mainnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current '--testnet' flag setting.`}; }
+			else if ( ( sign_addr.network == 'testnet' ) && (typeof sub_args['testnet'] === 'undefined') ) { // check for testnet address
+				throw {'msg': `The testnet ${sign_addr.type} address '${sign_addr.addr}' does not match your current setting. Use '--testnet' flag for testnets.`}; }
 
                         //check that the given address belongs to the pubKey
                         if ( sub_args['nohashcheck'] === false && ! sign_addr.matchPubKey ) { //exit with an error if the address does not contain the pubKey hash
@@ -1452,7 +1512,7 @@ function signCIP8(workMode = "sign-cip8", calling_args = process.argv.slice(3)) 
 					content += `"secretKey": "${prvKeyHex}", `; }
 				content += `"output": { "signedMessage": "${signedMsg}", "COSE_Sign1_hex": "${COSE_Sign1_cbor_hex}", "COSE_Key_hex": "${COSE_Key_cbor_hex}" }`;
 				if ( sub_args['include-maps'] === true ) { //generate content also with JSON-Maps for the COSE_Key, COSE_Sign1 and verifyData structures
-					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "verifyData": ${mapToJs(Sig_structure)}, "protectedHeader": ${mapToJs(cbor.decode(protectedHeader_cbor_hex))} }` }
+					content += `, "maps": { "COSE_Key": ${mapToJs(COSE_Key_structure)}, "COSE_Sign1": ${mapToJs(COSE_Sign1_structure)}, "signData": ${mapToJs(Sig_structure)}, "protectedHeader": ${mapToJs(cbor.decode(protectedHeader_cbor_hex))} }` }
 				content += ` }`
 
 			} else { //generate content in text format
@@ -1642,10 +1702,10 @@ async function main() {
 			if ( ! rewards_addr.type.includes('payment') ) { console.error(`Error: The rewards address '${rewards_addr.addr}' is not a payment address starting with 'addr...'`); process.exit(1); }
 
 			//check that the given address belongs to the current network
-			if ( ( rewards_addr.network == 'mainnet' ) && !(typeof args['testnet-magic'] === 'undefined') ) { // check for mainnet address
-				console.error(`Error: The mainnet ${rewards_addr.type} address '${rewards_addr.addr}' does not match your current '--testnet-magic xxx' setting.`); process.exit(1); }
-			else if ( ( rewards_addr.network == 'testnet' ) && (typeof args['testnet-magic'] === 'undefined') ) { // check for testnet address
-				console.error(`Error: The testnet ${rewards_addr.type} address '${rewards_addr.addr}' does not match your current setting. Use '--testnet-magic xxx' for testnets.`); process.exit(1); }
+			if ( ( rewards_addr.network == 'mainnet' ) && !(typeof args['testnet'] === 'undefined') ) { // check for mainnet address
+				console.error(`Error: The mainnet ${rewards_addr.type} address '${rewards_addr.addr}' does not match your current '--testnet' flag setting.`); process.exit(1); }
+			else if ( ( rewards_addr.network == 'testnet' ) && (typeof args['testnet'] === 'undefined') ) { // check for testnet address
+				console.error(`Error: The testnet ${rewards_addr.type} address '${rewards_addr.addr}' does not match your current setting. Use '--testnet' flag for testnets.`); process.exit(1); }
 
 			//get signing key -> store it in sign_key
 			var key_file_hex = args['secret-key'];
@@ -2192,7 +2252,7 @@ async function main() {
 			//setup
 			var XpubKeyHex = '', XpubKeyBech = '', rootPubKeyHex = '', vote_purpose = -1, drepIdHex = '', drepIdBech = ''; drepIdHexLegacy = '', drepIdBechLegacy = '';
 			var ccColdIdHex = '', ccColdIdBech = '', ccHotIdHex = '', ccHotIdBech = '';
-			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '', address = '';
+			var prvKeyBech = '', pubKeyBech = '', poolIdHex = '', poolIdBech = '', derivation_type = '', address = '', addrNetwork = 'mainnet';
 			var rootKeyHex = '', byronKeyHex = '', exodusKeyHex = '', rootPubKeyHex = '', calidusIdHex = '', outIdBech = ''; //option to write out the generated id to a file
 			var paperWalletMnemonics = ''; //holder for the given 27 word daedalus byron paper-wallet mnemonic
 
@@ -2244,6 +2304,9 @@ async function main() {
 			//load or overwrite derivation path if CIP36 vote keys are selected
 			if ( args['cip36'] === true ) { var derivation_path = '1694H/1815H/0H/0/0' }
 
+			//check about a given testnet flag
+			if ( typeof args['testnet'] !== 'undefined') { addrNetwork = 'testnet'; }
+
 			//check about a given extra passphrase
 			var passphrase = args['passphrase'];
 		        if ( typeof passphrase !== 'string' ) { passphrase = '' };
@@ -2276,7 +2339,7 @@ async function main() {
 				} else if ( mnemonicsWordCount == 21 && workMode == "keygen-yoroi" ) {
 					try {
 						var paperWalletMnemonics = mnemonics; //save the given paper-wallet scrambled mnemonics for the output later on
-						var mnemonics = unscrambleYoroiPaperWalletMnemonic(mnemonics, passphrase); //set the unscrambled 18 word mnemonics as the new mnemonics for byron yoroi
+						var mnemonics = unscrambleYoroiPaperWalletMnemonic(mnemonics, passphrase); //set the unscrambled 15 word mnemonics as the new mnemonics for byron yoroi
 						mnemonicsWordCount = wordCount(mnemonics); //should be 18 words now
 						if (mnemonicsWordCount != 15) { throw(`Unscrambled Mnemonics are ${mnemonicsWordCount} words and not 15 words!?`); }
 						var entropy = Buffer.from(bip39.mnemonicToEntropy(mnemonics),'hex')
@@ -2335,6 +2398,9 @@ async function main() {
 
 			//if there is no derivation_path set, than a simple normal ed25519 key (not derived) is requested
 			if ( derivation_path == '' ) { //generate a simple ed25519 keypair
+
+				//check if a passphrase was provided, that is not supported for a non derived keypair
+				if ( passphrase != '' ) { console.error(`Error: Setting a passphrase via '--passphrase xxx' is not supported for a simple ed25519 keypair. Only supported for derived keys.`); process.exit(1); }
 
 				try {
 				        var rootKey = CardanoWasm.PrivateKey.generate_ed25519(); //generate a new ed25519 key
@@ -2450,7 +2516,8 @@ async function main() {
 
 						default:	// defaults to normal icarus/shelley (wallet) derivation method
 								try {
-									var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics)
+									var rootKey = CardanoWasm.Bip32PrivateKey.from_bytes(masterKey = generateIcarusMasterKey(entropy, passphrase));
+									// var rootKey = CardanoWasm.Bip32PrivateKey.from_bip39_entropy(entropy,''); //generate a ed25519e key from the provided entropy(mnemonics) - old style does not support a passphrase
 								} catch (error) { console.error(`Error: Could not generate the rootKey for icarus/normal type from the entropy/mnemonic. '${error}'`); process.exit(1); }
 								derivation_type = 'icarus';
 								break;
@@ -2613,6 +2680,7 @@ async function main() {
 
 					var skeyContent = `{ "type": "PaymentSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "${prvKeyCbor}" }`;
 					var vkeyContent = `{ "type": "PaymentVerificationKeyShelley_ed25519", "description": "Payment Verification Key", "cborHex": "${pubKeyCbor}" }`;
+					var address = generateShelleyAddress(pubKeyHex, 'payment enterprise', addrNetwork).bech;
 					break;
 
 
@@ -2649,8 +2717,8 @@ async function main() {
 
 						case '2': //path is a stake key
 
+							var address = generateShelleyAddress(pubKeyHex, 'stake', addrNetwork).bech;
 							var skeyContent = `{ "type": "StakeExtendedSigningKeyShelley_ed25519_bip32", "description": "Stake Signing Key", "cborHex": "${prvKeyCbor}" }`;
-
 							if ( args['vkey-extended'] === true ) {
 								var vkeyContent = `{ "type": "StakeExtendedVerificationKeyShelley_ed25519_bip32", "description": "Stake Verification Key", "cborHex": "${pubKeyCbor}" }`;
 							} else {
@@ -2738,6 +2806,7 @@ async function main() {
 
 								default: //standard payment key
 									var keyFileDescription = "Payment"
+									var address = generateShelleyAddress(pubKeyHex, 'payment enterprise', addrNetwork).bech;
 									break;
 
 							} //switch args['path']
