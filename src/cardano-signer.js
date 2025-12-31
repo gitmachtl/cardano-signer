@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.33.0"
+const version = "1.34.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -24,7 +24,7 @@ const parse_options = {
 		 'calidus-public-key', 'data', 'data-hex', 'data-file', 'out-file', 'out-cbor', 'out-skey', 'out-vkey', 'out-id', 'out-mnemonics', 'out-addr',
 		 'out-canonized', 'cose-sign1', 'cose-key', 'mnemonics', 'path', 'testnet', 'mainnet', 'author-name', 'passphrase'],
 
-	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'deregister', 'disable-safemode',
+	boolean: ['help', 'version', 'usage', 'json', 'json-extended', 'cip8', 'cip30', 'cip36', 'cip88', 'cip100', 'cip151', 'deregister', 'disable-safemode',
 		  'jcli', 'bech', 'hashed', 'nopayload', 'vkey-extended', 'nohashcheck', 'replace', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake', 'include-maps', 'include-secret', 'signature-only'], //all booleans are set to false per default
 
 	//adding some aliases so users can also use variants of the original parameters. for example using --signing-key instead of --secret-key
@@ -53,11 +53,21 @@ const regExpPathByron = /^[0-9]+H\/[0-9]+H(\/[0-9]+H){0,3}$/;  //path: first two
 const regExpPathYoroi = /^44H\/1815H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first two elements must always be 44H/1815H, max. 5 elements
 const regExpPathExodus = /^44H\/1815H\/[0-9]+H(\/[0-9]+H?){0,2}$/;  //path: first two elements must always be 44H/1815H, max. 5 elements
 const regExpIntNumber = /^-?[0-9]+$/; 		//matches positive and optional negative integer numbers
+const regExpHttpsUrl = /^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/; //matches a http/https url style
 
 //catch all exceptions that are not catched via try
-process.on('uncaughtException', function (error) {
-    console.error(`${error}`); process.exit(1);
+process.on('uncaughtException', function (err) {
+    process.stderr.write(`${err}`); process.exit(1);
 });
+
+//surpress experimental warnings for the fetch api
+const originalEmit = process.emit;
+process.emit = function (name, data, ...args) {
+  if ( name === `warning` && typeof data === `object` && data.name === `ExperimentalWarning` && data.message.includes(`Fetch API`) ) { return false; }
+  return originalEmit.apply(process, arguments);
+};
+
+
 
 
 function showUsage(topic, exit = true){
@@ -133,10 +143,12 @@ function showUsage(topic, exit = true){
 		break;
 
 	case 'sign-cip88':
+	case 'sign-cip151':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Sign and generate a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 mode:${Reset}`)
+	        console.log(`${Bright}${Underscore}Sign and generate a Calidus-Pool-PublicKey registration with a Pool-Cold-Key in CIP-88v2 / CIP-151 mode:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}sign --cip88${Reset}`);
+	        console.log(`           ${Bright}${appname} ${FgGreen}sign --cip151${Reset}`);
 		console.log(`   Params: ${FgGreen}--calidus-public-key${Reset} "<path_to_file>|<hex>|<bech>"	${Dim}public-key-file or public hex/bech-key string to use as the new calidus-key${Reset}`);
 		console.log(`           ${FgGreen}--secret-key${Reset} "<path_to_file>|<hex>|<bech>"		${Dim}signing-key-file or a direct signing hex/bech-key string of the stakepool${Reset}`);
 		console.log(`           [${FgGreen}--nonce${Reset} <unsigned_int>]				${Dim}optional nonce value, if not provided the mainnet-slotHeight calculated from current machine-time will be used${Reset}`);
@@ -202,10 +214,12 @@ function showUsage(topic, exit = true){
 		break;
 
 	case 'verify-cip88':
+	case 'verify-cip151':
 	        console.log(``)
-	        console.log(`${Bright}${Underscore}Verify CIP-88v2 Calidus-Pool-PublicKey registration-data:${Reset}`)
+	        console.log(`${Bright}${Underscore}Verify CIP-88v2 / CIP151 Calidus-Pool-PublicKey registration-data:${Reset}`)
 	        console.log(``)
 	        console.log(`   Syntax: ${Bright}${appname} ${FgGreen}verify --cip88${Reset}`);
+	        console.log(`           ${Bright}${appname} ${FgGreen}verify --cip151${Reset}`);
 		console.log(`   Params: ${FgGreen}--data${Reset} "<json-metadata>" |				${Dim}data to verify as json text${Reset}`);
 		console.log(`           ${FgGreen}--data-file${Reset} "<path_to_file>" |			${Dim}data to verify as json file${Reset}`);
 		console.log(`           ${FgGreen}--data-hex${Reset} "<hex>"					${Dim}data to verify as cbor-hex-format${Reset}`);
@@ -1549,7 +1563,7 @@ async function main() {
         workMode = trimString(workMode.toLowerCase());
 
 	//check additional flags and add it to the workMode var
-	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake' ];
+	workmodeFlags = [ 'cip8', 'cip30', 'cip36', 'deregister', 'cip88', 'cip100', 'cip151', 'ledger', 'trezor', 'byron', 'yoroi', 'exodus', 'exodus-stake' ];
 	workmodeFlags.forEach( element => { args[element] ? workMode += `-${element}` : {} } );
 
 	//show usage for the workMode
@@ -1980,7 +1994,8 @@ async function main() {
 
 
 
-                case "sign-cip88":  //SIGN REGISTRATION DATA IN CIP-86 MODE (Pool-ID-Registration)
+                case "sign-cip88":  //SIGN REGISTRATION DATA IN CIP-86 / CIP151 MODE (Pool-ID-Registration)
+                case "sign-cip151":
 
 			//get calidus public key -> store it in calidusPubKeyHex
 			var key_file_hex = args['calidus-public-key'];
@@ -2970,6 +2985,10 @@ async function main() {
 
 		case "canonize-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA
 
+			//set default variables
+			var contextUrl, contextUrlFinal = '' //might hold the URL to fetch the @context content in the given jsonld file
+			var safeMode = true;
+
 			//lets try to load data from the data parameter
 			var data = args['data'];
 		        if ( typeof data === 'undefined' || data == '' ) {
@@ -2997,11 +3016,26 @@ async function main() {
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
 			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
-			var safeMode = true;
 			if ( args['disable-safemode'] === true ) { safeMode = false; }
 
+			//check if the content of @context is a https url - this method works universal and does not rely on the fetching functions of the jsonld lib itself
+			if ( typeof jsonld_data["@context"] === 'string' ) {
+				contextUrl = jsonld_data["@context"]; //try to use the content of @context as an url and fetch it
+				if ( ! regExpHttpsUrl.test(contextUrl) ) { console.error(`Error: Content of @context '${contextUrl}' is not a valid http/https url`); process.exit(1); }
+				//looks like we have found a valid url format, now fetch the content
+				try {
+					const response = await fetch(contextUrl, { signal: AbortSignal.timeout(5000) }); //fetch with a 5s timeout. use the url 'http://www.google.com:81/' for testing
+					if (!response.ok) { console.error(`Error: Could not fetch url content '${contextUrl}', HTTP-Status: ${response.status} ${response.statusText}`); process.exit(1); }
+					try {
+						const fetchedContext = await response.json(); //get the fetched result as a json object
+						jsonld_data["@context"] = fetchedContext; //replace the content in the jsonld_data with the fetched result
+						contextUrlFinal = response.url; //get the final url after maybe redirects
+					} catch (err) {	console.error(`Error: The content at '${contextUrl}' is not a valid JSON. ${err.message}`); process.exit(1); }
+				} catch (err) { console.error(`Error: Could not fetch url content '${contextUrl}'. ${err.message}`); process.exit(1); }
+			} else if ( typeof jsonld_data["@context"] === 'object' && jsonld_data["@context"] instanceof Array ) { console.error(`Error: Content of @context is an array, it should be a json object or a valid http/https url string`); process.exit(1); }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			await jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
@@ -3027,7 +3061,9 @@ async function main() {
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
 							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
 						})
-						var content = `{ "workMode": "${workMode}", "canonizedHash": "${canonized_hash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
+						var content = `{ "workMode": "${workMode}", "canonizedHash": "${canonized_hash}"`;
+						if ( contextUrl != '' ) { content += `, "contextUrl": "${contextUrl}", "contextUrlFinal": "${contextUrlFinal}"`; }
+						content += `, "body": ` + JSON.stringify(jsonld_data["body"])+ `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = canonized_hash;
 					}
@@ -3047,12 +3083,15 @@ async function main() {
 
 			break;
 
+
 		case "verify-cip100": //CANONIZE AND HASH JSONLD GOVERNANCE METADATA, CHECKS ALL THE AUTHORS SIGNATURES
 
-			//load default variable
+			//set default variables
 			var result = false //will be true if all authors signatures are valid/verified and no error occurs
 			var errorStr = '' //will hold an explanation about an error
 			var authors_array = [] //holds the authors for the output with there name and verified field
+			var safeMode = true; //default mode is to use safeMode, might be overwritten via the --disable-safemode flag
+			var contextUrl, contextUrlFinal = '' //might hold the URL to fetch the @context content in the given jsonld file
 
 					//if the input to check was a file, read it in again to also provide the fileHash for it, if something goes wrong, don't show the anchorHash
 				        if ( typeof data_file !== 'undefined' && data_file != '' ) {
@@ -3064,7 +3103,6 @@ async function main() {
 								var fileHash = `, "fileHash": "` + getHash(Buffer.from(data)) + `"`; //get the hash of the provided data
 							} catch (error) { anchorHash = ''; }
 						} else { anchorHash = ''; }
-
 
 
 			//lets try to load data from the data parameter
@@ -3101,11 +3139,26 @@ async function main() {
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
 			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
-			var safeMode = true;
 			if ( args['disable-safemode'] === true ) { safeMode = false; }
 
+			//check if the content of @context is a https url - this method works universal and does not rely on the fetching functions of the jsonld lib itself
+			if ( typeof jsonld_data["@context"] === 'string' ) {
+				contextUrl = jsonld_data["@context"]; //try to use the content of @context as an url and fetch it
+				if ( ! regExpHttpsUrl.test(contextUrl) ) { console.error(`Error: Content of @context '${contextUrl}' is not a valid http/https url`); process.exit(1); }
+				//looks like we have found a valid url format, now fetch the content
+				try {
+					const response = await fetch(contextUrl, { signal: AbortSignal.timeout(5000) }); //fetch with a 5s timeout. use the url 'http://www.google.com:81/' for testing
+					if (!response.ok) { console.error(`Error: Could not fetch url content '${contextUrl}', HTTP-Status: ${response.status} ${response.statusText}`); process.exit(1); }
+					try {
+						const fetchedContext = await response.json(); //get the fetched result as a json object
+						jsonld_data["@context"] = fetchedContext; //replace the content in the jsonld_data with the fetched result
+						contextUrlFinal = response.url; //get the final url after maybe redirects
+					} catch (err) {	console.error(`Error: The content at '${contextUrl}' is not a valid JSON. ${err.message}`); process.exit(1); }
+				} catch (err) { console.error(`Error: Could not fetch url content '${contextUrl}'. ${err.message}`); process.exit(1); }
+			} else if ( typeof jsonld_data["@context"] === 'object' && jsonld_data["@context"] instanceof Array ) { console.error(`Error: Content of @context is an array, it should be a json object or a valid http/https url string`); process.exit(1); }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			await jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
@@ -3201,7 +3254,10 @@ async function main() {
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
 							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
 						})
-						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array) + `, "canonizedHash": "${canonized_hash}", "fileHash": "${fileHash}", "body": ` + JSON.stringify(jsonld_data["body"]) + `, "canonizedBody": [ ${canonized_array} ] }`;
+						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array);
+						content += `, "canonizedHash": "${canonized_hash}", "fileHash": "${fileHash}"`;
+						if ( contextUrl != '' ) { content += `, "contextUrl": "${contextUrl}", "contextUrlFinal": "${contextUrlFinal}"`; }
+						content += `, "body": ` + JSON.stringify(jsonld_data["body"])+ `, "canonizedBody": [ ${canonized_array} ] }`;
 					} else { //generate content in text format
 						var content = result;
 					}
@@ -3228,6 +3284,8 @@ async function main() {
 			var authors_array = [] //holds the authors for the output with there name and verified field
 			var all_authors_publickey_array = [] //holds a list of all publickeys of the authors
 			var authorSigningMode = "ed25519" //default signing mode
+			var safeMode = true; //default mode is to use safeMode, might be overwritten via the --disable-safemode flag
+			var contextUrl, contextUrlFinal = '' //might hold the URL to fetch the @context content in the given jsonld file
 
 			//get signing key -> store it in sign_key
 			var key_file_hex = args['secret-key'];
@@ -3282,11 +3340,26 @@ async function main() {
 			} catch (error) { console.error(`Error: Couldn't extract '@context' and 'body' JSON-LD data (${error})`); process.exit(1); }
 
 			//allow to canonized in an unsafe mode (dropping some data) if the --disable-safemode flag is set
-			var safeMode = true;
 			if ( args['disable-safemode'] === true ) { safeMode = false; }
 
+			//check if the content of @context is a https url - this method works universal and does not rely on the fetching functions of the jsonld lib itself
+			if ( typeof jsonld_data["@context"] === 'string' ) {
+				contextUrl = jsonld_data["@context"]; //try to use the content of @context as an url and fetch it
+				if ( ! regExpHttpsUrl.test(contextUrl) ) { console.error(`Error: Content of @context '${contextUrl}' is not a valid http/https url`); process.exit(1); }
+				//looks like we have found a valid url format, now fetch the content
+				try {
+					const response = await fetch(contextUrl, { signal: AbortSignal.timeout(5000) }); //fetch with a 5s timeout. use the url 'http://www.google.com:81/' for testing
+					if (!response.ok) { console.error(`Error: Could not fetch url content '${contextUrl}', HTTP-Status: ${response.status} ${response.statusText}`); process.exit(1); }
+					try {
+						const fetchedContext = await response.json(); //get the fetched result as a json object
+						jsonld_data["@context"] = fetchedContext; //replace the content in the jsonld_data with the fetched result
+						contextUrlFinal = response.url; //get the final url after maybe redirects
+					} catch (err) {	console.error(`Error: The content at '${contextUrl}' is not a valid JSON. ${err.message}`); process.exit(1); }
+				} catch (err) { console.error(`Error: Could not fetch url content '${contextUrl}'. ${err.message}`); process.exit(1); }
+			} else if ( typeof jsonld_data["@context"] === 'object' && jsonld_data["@context"] instanceof Array ) { console.error(`Error: Content of @context is an array, it should be a json object or a valid http/https url string`); process.exit(1); }
+
 			//Start the async canonize process, will get triggered via the .then part once the process finished
-			jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
+			await jsonld.canonize(jsonld_data, {safe: safeMode, algorithm: 'URDNA2015', format: 'application/n-quads'}).then( (canonized_data) =>
 			        {
 				//data was successfully canonized
 
@@ -3433,7 +3506,8 @@ async function main() {
 			break;
 
 
-		case "verify-cip88": //VERIFY DATA IN CIP88v2 (Calidus-Pool-Key)
+		case "verify-cip88": //VERIFY DATA IN CIP88v2 / CIP151 (Calidus-Pool-Key)
+		case "verify-cip151":
 
 			//lets try to load data from the data parameter in json format
 			var data = args['data'];
@@ -3603,6 +3677,6 @@ async function main() {
 
 
 //main();
-main().catch( (err) => {process.exit(1);} );
+main().catch( (err) => { process.stderr.write(`${err}\n`); process.exit(1); } );
 
 //process.exit(0); //we're finished, exit with errorcode 0 (all good)
