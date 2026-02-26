@@ -1,6 +1,6 @@
 //define name and version
 const appname = "cardano-signer"
-const version = "1.34.0"
+const version = "1.35.0"
 
 //external dependencies
 const CardanoWasm = require("@emurgo/cardano-serialization-lib-nodejs")
@@ -3676,7 +3676,36 @@ async function main() {
 }
 
 
-//main();
-main().catch( (err) => { process.stderr.write(`${err}\n`); process.exit(1); } );
+//
+// Only run main if called directly and not via `required`
+//
+if (require.main === module) {
+	main().catch( (err) => { process.stderr.write(`${err}\n`); process.exit(1); } );
+}
 
-//process.exit(0); //we're finished, exit with errorcode 0 (all good)
+//
+// Export functions for use in other modules
+//
+module.exports = {
+	signCIP8,
+	verifyCIP8,
+	readKey2hex,
+	readAddr2hex,
+	readByronDaedalusAddress,
+	generateShelleyAddress,
+	generateIcarusMasterKey,
+	generateLedgerMasterKey,
+	generateByronMasterKeyFromMnemonic,
+	generateByronMasterKeyFromSeed,
+	generateByronDaedalusAddress,
+	generateByronYoroiAddress,
+	generateSeedFromBip39Mnemonic,
+	generateBip32MasterKeyFromSeed,
+	getByronDaedalusAddressPath,
+	getHash,
+	unscrambleDaedalusPaperWalletMnemonic,
+	unscrambleYoroiPaperWalletMnemonic,
+	deriveBip32Child,
+	jsToMap,
+	mapToJs,
+};
