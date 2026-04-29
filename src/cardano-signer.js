@@ -16,6 +16,11 @@ const jsonld = require('jsonld'); //used for canonizing json data (governance CI
 const crc32 = require('crc').crc32; //currently only used for byron addressDataChecksum calculation
 const secp256k1 = require('secp256k1'); //required for bip39 child derivation (exodus)
 const CardanoWallet = require('cardano-wallet'); //only used for the yoroi paperwallet unscrambling for now, trying to remove this dependency later on
+[process.stdout, process.stderr].forEach((stream) => {
+	if (stream._handle && typeof stream._handle.setBlocking === 'function') {
+		stream._handle.setBlocking(true); // Force stdout/stderr into blocking mode to avoid EAGAIN errors for pipe buffer overflows
+	}
+});
 
 //set the options for the command-line arguments, so that arguments like data-hex="001122" are not parsed as numbers
 const parse_options = {
@@ -3059,7 +3064,7 @@ async function main() {
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
-							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
+							canonized_array.push(JSON.stringify(String(element))); //use JSON.stringify to escape backslashes, double quotes, and any control characters (U+0000..U+001F) while pushing new elements to the array
 						})
 						var content = `{ "workMode": "${workMode}", "canonizedHash": "${canonized_hash}"`;
 						if ( contextUrl != '' ) { content += `, "contextUrl": "${contextUrl}", "contextUrlFinal": "${contextUrlFinal}"`; }
@@ -3252,7 +3257,7 @@ async function main() {
 						//split the canonized data into an array, remove the last element, do a loop for each element
 						var canonized_array = [];
 						canonized_data.split('\n').slice(0,-1).forEach( (element) => {
-							canonized_array.push('"' + String(element).replace(/\\([\s\S])|(")/g,"\\$1$2") + '"'); //escape " with \" if it not already a \" while pushing new elements to the array
+							canonized_array.push(JSON.stringify(String(element))); //use JSON.stringify to escape backslashes, double quotes, and any control characters (U+0000..U+001F) while pushing new elements to the array
 						})
 						var content = `{ "workMode": "${workMode}", "result": ${result}, "errorMsg": "${errorStr}", "authors": ` + JSON.stringify(authors_array);
 						content += `, "canonizedHash": "${canonized_hash}", "fileHash": "${fileHash}"`;
